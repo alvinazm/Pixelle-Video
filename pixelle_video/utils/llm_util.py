@@ -22,69 +22,59 @@ from loguru import logger
 
 
 def fetch_available_models(api_key: str, base_url: str, timeout: float = 10.0) -> List[str]:
-    """
-    Fetch available models from an OpenAI-compatible API endpoint.
-    
-    Uses the standard GET /v1/models endpoint with Bearer token authentication.
-    
-    Args:
-        api_key: The API key for authentication
-        base_url: The base URL of the API (e.g., https://api.openai.com/v1)
-        timeout: Request timeout in seconds
-    
-    Returns:
-        List of model IDs available from the API
-    
-    Raises:
-        httpx.HTTPStatusError: If the API returns an error status code
-        httpx.RequestError: If there's a network error
-    """
-    # Normalize base_url - ensure it ends with /v1 or similar
     base_url = base_url.rstrip("/")
-    
-    # Build the models endpoint URL
-    # Handle cases where base_url might or might not include /v1
     if base_url.endswith("/v1"):
         models_url = f"{base_url}/models"
     else:
         models_url = f"{base_url}/v1/models"
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     logger.debug(f"Fetching models from: {models_url}")
-    
+
     with httpx.Client(timeout=timeout) as client:
         response = client.get(models_url, headers=headers)
+        if response.status_code == 404:
+            logger.debug("Provider does not support /v1/models endpoint")
+            return []
         response.raise_for_status()
-        
         data = response.json()
-        models = [model["id"] for model in data.get("data", [])]
-        
-        # Sort models alphabetically for better UX
+        models = [m["id"] for m in data.get("data", [])]
         models.sort()
-        
         logger.debug(f"Fetched {len(models)} models")
         return models
 
 
-def test_llm_connection(api_key: str, base_url: str, timeout: float = 10.0) -> Tuple[bool, str, int]:
-    """
-    Test the LLM API connection by attempting to fetch the models list.
-    
-    Args:
-        api_key: The API key for authentication
-        base_url: The base URL of the API
-        timeout: Request timeout in seconds
-    
-    Returns:
-        Tuple of (success: bool, message: str, model_count: int)
-        - success: True if connection succeeded
-        - message: Human-readable status message
-        - model_count: Number of models available (0 if failed)
-    """
+def _fetch_models_via_chat_completion(
+    api_key: str, base_url: str, timeout: float = 10.0
+) -> List[str]:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        chat_url = f"{base}/chat/completions"
+    else:
+        chat_url = f"{base}/v1/chat/completions"
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "list models"}],
+        "max_tokens": 5,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(chat_url, headers=headers, json=payload)
+        if response.status_code == 401:
+            return []
+        if response.status_code in (400, 200):
+            return []
+        return []
+    except Exception:
+        return []
+
+
+def test_llm_connection(
+    api_key: str, base_url: str, timeout: float = 10.0
+) -> Tuple[bool, str, int]:
     try:
         models = fetch_available_models(api_key, base_url, timeout)
         return True, f"Connection successful! {len(models)} models available.", len(models)
@@ -95,7 +85,7 @@ def test_llm_connection(api_key: str, base_url: str, timeout: float = 10.0) -> T
         elif status_code == 403:
             return False, "Access forbidden: Check your API Key permissions", 0
         elif status_code == 404:
-            return False, "API endpoint not found: Check your Base URL", 0
+            return _test_connection_via_chat_completion(api_key, base_url, timeout)
         else:
             return False, f"API error: HTTP {status_code}", 0
     except httpx.ConnectError:
@@ -105,3 +95,37 @@ def test_llm_connection(api_key: str, base_url: str, timeout: float = 10.0) -> T
     except Exception as e:
         logger.error(f"LLM connection test error: {e}")
         return False, f"Error: {str(e)}", 0
+
+
+def _test_connection_via_chat_completion(
+    api_key: str, base_url: str, timeout: float = 10.0
+) -> Tuple[bool, str, int]:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        chat_url = f"{base}/chat/completions"
+    else:
+        chat_url = f"{base}/v1/chat/completions"
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 5,
+    }
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(chat_url, headers=headers, json=payload)
+        if response.status_code == 401:
+            return False, "Authentication failed: Invalid API Key", 0
+        if response.status_code == 400:
+            return True, "Connection successful (API reachable, model name may need adjustment).", 0
+        if response.status_code == 200:
+            return True, "Connection successful!", 0
+        return False, f"API error: HTTP {response.status_code}", 0
+    except httpx.ConnectError:
+        return False, "Connection failed: Cannot reach the server", 0
+    except httpx.TimeoutException:
+        return False, "Connection timeout: Server did not respond in time", 0
+    except Exception:
+        return False, "API endpoint not found: Check your Base URL", 0

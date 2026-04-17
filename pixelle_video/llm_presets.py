@@ -57,6 +57,12 @@ LLM_PRESETS: List[Dict[str, Any]] = [
         "model": "moonshot-v1-8k",
         "api_key_url": "https://platform.moonshot.cn/console/api-keys",
     },
+    {
+        "name": "MiniMax",
+        "base_url": "https://api.minimax.chat/v1",
+        "model": "MiniMax-M2.7",
+        "api_key_url": "https://platform.minimax.io/docs/llms/text/openai-api",
+    },
 ]
 
 
@@ -76,7 +82,7 @@ def get_preset(name: str) -> Dict[str, Any]:
 def find_preset_by_base_url_and_model(base_url: str, model: str) -> str | None:
     """
     Find preset name by base_url and model
-    
+
     Returns:
         Preset name if found, None otherwise
     """
@@ -84,4 +90,3 @@ def find_preset_by_base_url_and_model(base_url: str, model: str) -> str | None:
         if preset["base_url"] == base_url and preset["model"] == model:
             return preset["name"]
     return None
-
