@@ -52,6 +52,7 @@
     "style.image_size_info": "Image Size: {width}x{height} (auto-determined by template)",
     "style.video_size_info": "Video Size: {width}x{height} (auto-determined by template)",
     "style.prompt_prefix": "Prompt Prefix",
+    "style.select_model": "Select Model",
     "style.prompt_prefix_what": "Automatically added before all image prompts to control the illustration style uniformly (e.g., cartoon, realistic)",
     "style.prompt_prefix_how": "Enter style description in the input box below. To save permanently, edit the config.yaml file",
     "style.prompt_prefix_placeholder": "Enter style prefix (leave empty for config default)",

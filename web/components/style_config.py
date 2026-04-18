@@ -732,10 +732,9 @@ def render_style_config(pixelle_video):
                 default_workflow_index = workflow_keys.index(saved_workflow)
         
             workflow_display = st.selectbox(
-                "Workflow",
+                tr('style.select_model'),
                 workflow_options if workflow_options else ["No workflows found"],
                 index=default_workflow_index,
-                label_visibility="collapsed",
                 key="media_workflow_select"
             )
         

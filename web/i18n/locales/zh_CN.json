@@ -52,6 +52,7 @@
     "style.image_size_info": "插图尺寸：{width}x{height}（由模板自动决定）",
     "style.video_size_info": "视频尺寸：{width}x{height}（由模板自动决定）",
     "style.prompt_prefix": "提示词前缀",
+    "style.select_model": "选择模型",
     "style.prompt_prefix_what": "自动添加到所有图片提示词前面，统一控制插图风格（如：卡通风格、写实风格等）",
     "style.prompt_prefix_how": "直接在下方输入框填写风格描述。若要永久保存，需编辑 config.yaml 文件",
     "style.prompt_prefix_placeholder": "输入风格前缀（留空则使用配置文件默认值）",
