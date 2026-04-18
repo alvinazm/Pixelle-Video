@@ -420,8 +420,21 @@ class DigitalHumanPipelineUI(PipelineUI):
                             }
                             if second_workflow_config.get("source") == "runninghub" and "workflow_id" in second_workflow_config:
                                 workflow_input = second_workflow_config["workflow_id"]
+                                logger.info(
+                                    f"🚀 [RunningHub] Digital Human - Step2 (Video Link) Request\n"
+                                    f"   ├─ Workflow ID : {workflow_input}\n"
+                                    f"   ├─ Workflow File: {second_workflow_path.name}\n"
+                                    f"   ├─ Image Input : {generated_image_path}\n"
+                                    f"   └─ Audio Input: {audio_path}"
+                                )
                             else:
                                 workflow_input = str(second_workflow_config)
+                                logger.info(
+                                    f"🔧 [Selfhost] Digital Human - Step2 (Video Link) Request\n"
+                                    f"   ├─ Workflow Path: {second_workflow_path}\n"
+                                    f"   ├─ Image Input : {generated_image_path}\n"
+                                    f"   └─ Audio Input: {audio_path}"
+                                )
                             second_result = await kit.execute(workflow_input, second_workflow_params)
                             # Video Link Extraction
                             generated_video_url = None
@@ -470,8 +483,21 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 workflow_config = json.load(open(workflow_path, 'r', encoding='utf8'))
                                 if workflow_config.get("source") == "runninghub" and "workflow_id" in workflow_config:
                                     workflow_input = workflow_config["workflow_id"]
+                                    logger.info(
+                                        f"🚀 [RunningHub] Digital Human - Step1 (Combine) Request\n"
+                                        f"   ├─ Workflow ID   : {workflow_input}\n"
+                                        f"   ├─ Workflow File : {workflow_path.name}\n"
+                                        f"   ├─ Character Img : {character_assets[0]}\n"
+                                        f"   └─ Goods Img     : {goods_assets[0]}"
+                                    )
                                 else:
                                     workflow_input = str(workflow_config)
+                                    logger.info(
+                                        f"🔧 [Selfhost] Digital Human - Step1 (Combine) Request\n"
+                                        f"   ├─ Workflow Path : {workflow_path}\n"
+                                        f"   ├─ Character Img  : {character_assets[0]}\n"
+                                        f"   └─ Goods Img      : {goods_assets[0]}"
+                                    )
                                 combine_image = await kit.execute(workflow_input, workflow_params)
                                 if combine_image.status != "completed":
                                     raise Exception(f"workflow execution failed: {combine_image.msg}")
@@ -512,8 +538,21 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 }
                                 if second_workflow_config.get("source") == "runninghub" and "workflow_id" in second_workflow_config:
                                     workflow_input = second_workflow_config["workflow_id"]
+                                    logger.info(
+                                        f"🚀 [RunningHub] Digital Human (Goods) - Step2 (Video Link) Request\n"
+                                        f"   ├─ Workflow ID : {workflow_input}\n"
+                                        f"   ├─ Workflow File: {second_workflow_path.name}\n"
+                                        f"   ├─ Image Input : {generated_image_url}\n"
+                                        f"   └─ Audio Input: {audio_path}"
+                                    )
                                 else:
                                     workflow_input = str(second_workflow_config)
+                                    logger.info(
+                                        f"🔧 [Selfhost] Digital Human (Goods) - Step2 (Video Link) Request\n"
+                                        f"   ├─ Workflow Path: {second_workflow_path}\n"
+                                        f"   ├─ Image Input : {generated_image_url}\n"
+                                        f"   └─ Audio Input: {audio_path}"
+                                    )
                                 second_result = await kit.execute(workflow_input, second_workflow_params)
                                 # Video Link Extraction
                                 generated_video_url = None
@@ -528,7 +567,11 @@ class DigitalHumanPipelineUI(PipelineUI):
                                                 break
                                 if not generated_video_url:
                                     raise Exception("The second step of the workflow did not return a video. Please check the workflow configuration.")
-                                            
+                                logger.info(
+                                    f"✅ [RunningHub] Digital Human (Goods) - Step2 Complete\n"
+                                    f"   └─ Video URL: {generated_video_url}"
+                                )
+                                        
                                 final_video_path = os.path.join(task_dir, "final.mp4")
                                 timeout = httpx.Timeout(300.0)
                                 async with httpx.AsyncClient(timeout=timeout) as client:
@@ -549,8 +592,23 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 workflow_config = json.load(open(workflow_path, 'r', encoding='utf8'))
                                 if workflow_config.get("source") == "runninghub" and "workflow_id" in workflow_config:
                                     workflow_input = workflow_config["workflow_id"]
+                                    logger.info(
+                                        f"🚀 [RunningHub] Digital Human - Step1 (Synthesis) Request\n"
+                                        f"   ├─ Workflow ID   : {workflow_input}\n"
+                                        f"   ├─ Workflow File  : {workflow_path.name}\n"
+                                        f"   ├─ Character Img  : {character_assets[0]}\n"
+                                        f"   ├─ Goods Img      : {goods_assets[0]}\n"
+                                        f"   └─ Goods Type     : {goods_title}"
+                                    )
                                 else:
                                     workflow_input = str(workflow_config)
+                                    logger.info(
+                                        f"🔧 [Selfhost] Digital Human - Step1 (Synthesis) Request\n"
+                                        f"   ├─ Workflow Path  : {workflow_path}\n"
+                                        f"   ├─ Character Img  : {character_assets[0]}\n"
+                                        f"   ├─ Goods Img      : {goods_assets[0]}\n"
+                                        f"   └─ Goods Type     : {goods_title}"
+                                    )
                                 synthesis_result = await kit.execute(workflow_input, workflow_params)
                                 if synthesis_result.status != "completed":
                                     raise Exception(f"workflow execution failed: {synthesis_result.msg}")
@@ -593,8 +651,21 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 }
                                 if second_workflow_config.get("source") == "runninghub" and "workflow_id" in second_workflow_config:
                                     workflow_input = second_workflow_config["workflow_id"]
+                                    logger.info(
+                                        f"🚀 [RunningHub] Digital Human - Step2 (Video Link) Request\n"
+                                        f"   ├─ Workflow ID : {workflow_input}\n"
+                                        f"   ├─ Workflow File: {second_workflow_path.name}\n"
+                                        f"   ├─ Image Input : {generated_image_url}\n"
+                                        f"   └─ Audio Input: {audio_path}"
+                                    )
                                 else:
                                     workflow_input = str(second_workflow_config)
+                                    logger.info(
+                                        f"🔧 [Selfhost] Digital Human - Step2 (Video Link) Request\n"
+                                        f"   ├─ Workflow Path: {second_workflow_path}\n"
+                                        f"   ├─ Image Input : {generated_image_url}\n"
+                                        f"   └─ Audio Input: {audio_path}"
+                                    )
                                 second_result = await kit.execute(workflow_input, second_workflow_params)
                                 # Video Link Extraction
                                 generated_video_url = None
@@ -609,7 +680,11 @@ class DigitalHumanPipelineUI(PipelineUI):
                                                 break
                                 if not generated_video_url:
                                     raise Exception("The second step of the workflow did not return a video. Please check the workflow configuration.")
-                                            
+                                logger.info(
+                                    f"✅ [RunningHub] Digital Human - Step2 Complete\n"
+                                    f"   └─ Video URL: {generated_video_url}"
+                                )
+                                        
                                 final_video_path = os.path.join(task_dir, "final.mp4")
                                 timeout = httpx.Timeout(300.0)
                                 async with httpx.AsyncClient(timeout=timeout) as client:
@@ -621,45 +696,7 @@ class DigitalHumanPipelineUI(PipelineUI):
                                 status_text.text(tr("status.success"))
                                 return final_video_path
                                 
-                    # Execute async generation
-                    final_video_path = run_async(generate_digital_human_video())
-                    
-                    total_time = time.time() - start_time
-                    progress_bar.progress(100)
-                    status_text.text(tr("status.success"))
-                    
-                    # Display result
-                    st.success(tr("status.video_generated", path=final_video_path))
-                    
-                    st.markdown("---")
-                    
-                    # Video info
-                    if os.path.exists(final_video_path):
-                        file_size_mb = os.path.getsize(final_video_path) / (1024 * 1024)
-                        
-                        info_text = (
-                            f"⏱️ {tr('info.generation_time')} {total_time:.1f}s   "
-                            f"📦 {file_size_mb:.2f}MB"
-                        )
-                        st.caption(info_text)
-                        
-                        st.markdown("---")
-                        
-                        # Video preview
-                        st.video(final_video_path)
-                        
-                        # Download button
-                        with open(final_video_path, "rb") as video_file:
-                            video_bytes = video_file.read()
-                            video_filename = os.path.basename(final_video_path)
-                            st.download_button(
-                                label="⬇️ 下载视频" if get_language() == "zh_CN" else "⬇️ Download Video",
-                                data=video_bytes,
-                                file_name=video_filename,
-                                mime="video/mp4",
-                                use_container_width=True
-                            )
-                    else:
+
                         st.error(tr("status.video_not_found", path=final_video_path))
                 
                 except Exception as e:

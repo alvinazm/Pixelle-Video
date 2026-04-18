@@ -234,11 +234,31 @@ class MediaService(ComfyBaseService):
             if workflow_info["source"] == "runninghub" and "workflow_id" in workflow_info:
                 # RunningHub: pass workflow_id (ComfyKit will use runninghub backend)
                 workflow_input = workflow_info["workflow_id"]
-                logger.info(f"Executing RunningHub workflow: {workflow_input}")
+                logger.info(
+                    f"🚀 [RunningHub] Media Generation Request\n"
+                    f"   ├─ Workflow ID   : {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   ├─ Media Type   : {media_type}\n"
+                    f"   ├─ Prompt       : {prompt[:200]}{'...' if len(prompt) > 200 else ''}\n"
+                    f"   ├─ Size         : {width or 'N/A'}x{height or 'N/A'}\n"
+                    f"   ├─ Duration     : {duration or 'N/A'}s\n"
+                    f"   ├─ Seed         : {seed or 'N/A'}\n"
+                    f"   └─ Steps        : {steps or 'N/A'}"
+                )
             else:
                 # Selfhost: pass file path (ComfyKit will use local ComfyUI)
                 workflow_input = workflow_info["path"]
-                logger.info(f"Executing selfhost workflow: {workflow_input}")
+                logger.info(
+                    f"🔧 [Selfhost] Media Generation Request\n"
+                    f"   ├─ Workflow Path: {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   ├─ Media Type   : {media_type}\n"
+                    f"   ├─ Prompt       : {prompt[:200]}{'...' if len(prompt) > 200 else ''}\n"
+                    f"   ├─ Size         : {width or 'N/A'}x{height or 'N/A'}\n"
+                    f"   ├─ Duration     : {duration or 'N/A'}s\n"
+                    f"   ├─ Seed         : {seed or 'N/A'}\n"
+                    f"   └─ Steps        : {steps or 'N/A'}"
+                )
             
             result = await kit.execute(workflow_input, workflow_params)
             
@@ -256,7 +276,12 @@ class MediaService(ComfyBaseService):
                     raise Exception("No video generated")
                 
                 video_url = result.videos[0]
-                logger.info(f"✅ Generated video: {video_url}")
+                logger.info(
+                    f"✅ [RunningHub] Media Generation Complete\n"
+                    f"   ├─ Media Type : video\n"
+                    f"   ├─ URL        : {video_url}\n"
+                    f"   └─ Duration   : {duration or result.duration or 'N/A'}s"
+                )
                 
                 # Try to extract duration from result (if available)
                 duration = None
@@ -275,7 +300,11 @@ class MediaService(ComfyBaseService):
                     raise Exception("No image generated")
                 
                 image_url = result.images[0]
-                logger.info(f"✅ Generated image: {image_url}")
+                logger.info(
+                    f"✅ [RunningHub] Media Generation Complete\n"
+                    f"   ├─ Media Type : image\n"
+                    f"   └─ URL        : {image_url}"
+                )
                 
                 return MediaResult(
                     media_type="image",

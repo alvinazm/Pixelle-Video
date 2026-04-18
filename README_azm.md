@@ -53,7 +53,8 @@ ComfyKit 是 ComfyUI 生态的通用客户端，RunningHub 底层也跑的是 Co
 
 
 # 快速创作-分镜类型-生成插图
-提示词在：/Users/azm/MyProject/Pixelle-Video/config.yaml 工作流ID：workflows/runninghub/image_Z-image.json #旧的ID=1995319131513794562
+- 提示词在：/Users/azm/MyProject/Pixelle-Video/config.yaml 
+- 工作流ID：workflows/runninghub/image_Z-image.json #旧的ID=1995319131513794562
 
 
 templates/1080x1920/image_blur_card.html 页面中
@@ -61,5 +62,8 @@ templates/1080x1920/image_blur_card.html 页面中
 - meta name="template:media-height" content="1024"> # 图片高度
 - meta name="viewport" content="width=1080, height=1920"> # 浏览器视口大小，用于渲染时模拟
  
-
+# TODO
+- 更换工作流ID
+- 口播视频，对口型
+- 插图生成，支持提示词模板
  

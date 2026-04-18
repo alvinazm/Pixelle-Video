@@ -89,7 +89,7 @@ def render_content_input():
                     tr("video.frames"),
                     min_value=3,
                     max_value=30,
-                    value=5,
+                    value=3,
                     help=tr("video.frames_help"),
                     label_visibility="collapsed"
                 )

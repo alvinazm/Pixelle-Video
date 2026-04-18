@@ -140,11 +140,21 @@ class VideoAnalysisService(ComfyBaseService):
             if workflow_info["source"] == "runninghub" and "workflow_id" in workflow_info:
                 # RunningHub: pass workflow_id
                 workflow_input = workflow_info["workflow_id"]
-                logger.info(f"Executing RunningHub workflow: {workflow_input}")
+                logger.info(
+                    f"🚀 [RunningHub] Video Analysis Request\n"
+                    f"   ├─ Workflow ID : {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   └─ Video Path  : {video_path}"
+                )
             else:
                 # Selfhost: pass file path
                 workflow_input = workflow_info["path"]
-                logger.info(f"Executing selfhost workflow: {workflow_input}")
+                logger.info(
+                    f"🔧 [Selfhost] Video Analysis Request\n"
+                    f"   ├─ Workflow Path: {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   └─ Video Path  : {video_path}"
+                )
             
             result = await kit.execute(workflow_input, workflow_params)
             

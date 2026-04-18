@@ -246,11 +246,25 @@ class TTSService(ComfyBaseService):
             if workflow_info["source"] == "runninghub" and "workflow_id" in workflow_info:
                 # RunningHub: pass workflow_id
                 workflow_input = workflow_info["workflow_id"]
-                logger.info(f"Executing RunningHub TTS workflow: {workflow_input}")
+                logger.info(
+                    f"🚀 [RunningHub] TTS Generation Request\n"
+                    f"   ├─ Workflow ID : {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   ├─ Text        : {text[:200]}{'...' if len(text) > 200 else ''}\n"
+                    f"   ├─ Voice       : {voice or 'N/A'}\n"
+                    f"   └─ Speed       : {speed}"
+                )
             else:
                 # Selfhost: pass file path
                 workflow_input = workflow_info["path"]
-                logger.info(f"Executing selfhost TTS workflow: {workflow_input}")
+                logger.info(
+                    f"🔧 [Selfhost] TTS Generation Request\n"
+                    f"   ├─ Workflow Path: {workflow_input}\n"
+                    f"   ├─ Workflow File: {workflow_info['name']}\n"
+                    f"   ├─ Text        : {text[:200]}{'...' if len(text) > 200 else ''}\n"
+                    f"   ├─ Voice       : {voice or 'N/A'}\n"
+                    f"   └─ Speed       : {speed}"
+                )
             
             result = await kit.execute(workflow_input, workflow_params)
             

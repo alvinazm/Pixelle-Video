@@ -314,8 +314,25 @@ class ActionTransferPipelineUI(PipelineUI):
 
                         if workflow_config.get("source") == "runninghub" and "workflow_id" in workflow_config:
                             workflow_input = workflow_config["workflow_id"]
+                            logger.info(
+                                f"🚀 [RunningHub] Action Transfer Request\n"
+                                f"   ├─ Workflow ID : {workflow_input}\n"
+                                f"   ├─ Workflow File: {workflow_path.name}\n"
+                                f"   ├─ Source Video: {video_path}\n"
+                                f"   ├─ Target Image: {image_path}\n"
+                                f"   ├─ Duration    : {second}s\n"
+                                f"   └─ Prompt     : {prompt[:200]}{'...' if len(prompt) > 200 else ''}"
+                            )
                         else:
                             workflow_input = str(workflow_path)
+                            logger.info(
+                                f"🔧 [Selfhost] Action Transfer Request\n"
+                                f"   ├─ Workflow Path: {workflow_path}\n"
+                                f"   ├─ Source Video: {video_path}\n"
+                                f"   ├─ Target Image: {image_path}\n"
+                                f"   ├─ Duration    : {second}s\n"
+                                f"   └─ Prompt     : {prompt[:200]}{'...' if len(prompt) > 200 else ''}"
+                            )
 
                         video_result = await kit.execute(workflow_input, workflow_params)
 
@@ -332,6 +349,11 @@ class ActionTransferPipelineUI(PipelineUI):
 
                         if not generated_video_url:
                             raise Exception("The workflow did not return a video. Please check the workflow configuration.")
+
+                        logger.info(
+                            f"✅ [RunningHub] Action Transfer Complete\n"
+                            f"   └─ Video URL: {generated_video_url}"
+                        )
 
                         final_video_path = os.path.join(task_dir, "final.mp4")
                         timeout = httpx.Timeout(300.0)
