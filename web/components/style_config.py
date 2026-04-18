@@ -25,6 +25,20 @@ from web.utils.async_helpers import run_async
 from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
 from pixelle_video.config import config_manager
 
+PROMPT_PREFIX_PRESETS = [
+    ("cartoon", "卡通风格", "Pixar and DreamWorks animation style, vibrant saturated colors, smooth 3D renders, whimsical and playful atmosphere, soft ambient lighting, rounded forms, family-friendly, high detail, 8k resolution"),
+    ("realistic", "写实风格", "photorealistic, ultra-detailed, hyperrealism, studio lighting, shallow depth of field, natural skin textures, cinematic composition, DSLR quality, RAW photo, 8k resolution"),
+    ("watercolor", "水彩画", "watercolor painting, soft wet-on-wet technique, delicate bleeding colors, translucent washes, paper texture visible, ethereal and dreamlike atmosphere, fine art quality, minimalist composition"),
+    ("cyberpunk", "赛博朋克", "cyberpunk aesthetic, neon-lit streets, futuristic cityscape, rain-slicked surfaces, holographic advertisements, chrome and leather, high-tech low-life atmosphere, volumetric fog, cinematic color grading, blade runner style"),
+    ("chinese_ink", "古风水墨", "traditional Chinese ink wash painting, Shanshui style, minimalist brushwork, poetic and serene, misty mountains, subtle gradations of black and grey, rice paper texture, classical East Asian aesthetics, contemplative mood"),
+    ("oil_painting", "油画风格", "classical oil painting, impressionist technique, rich impasto textures, warm golden hour lighting, museum quality, visible brushstrokes, master painter style, dramatic chiaroscuro, velvet color palette, timeless elegance"),
+    ("anime", "日漫风", "Japanese anime style, Studio Ghibli inspired, cel shading, soft watercolor backgrounds, gentle and heartwarming atmosphere, detailed character design, lush green environments, Miyazaki aesthetic, hand-painted quality"),
+    ("shinkai", "新海诚风", "By Makoto Shinkai, digital painting, anime style, high contrast, vibrant color palette, hyper-detailed, crystal clear, cinematic composition, sunbeams and lens flare, dramatic lighting, serene and healing atmosphere, 8k resolution"),
+    ("3d_render", "3D渲染", "3D render, octane ray tracing, studio product photography lighting, hyper-detailed textures, clean and crisp, professional CGI, subsurface scattering, soft shadows, commercial quality, 8k resolution"),
+    ("pixel_art", "像素风格", "pixel art, 16-bit retro game aesthetic, vibrant colors, clean pixel grid, isometric or side-view composition, nostalgic gaming atmosphere, Final Fantasy and Chrono Trigger inspired, charming and detailed sprites"),
+    ("comic", "美漫画风", "American comic book style, bold black outlines, halftone dot screening, vibrant flat colors, Marvel and DC influenced, dynamic action poses, dramatic perspective, splash page quality, comic panel composition"),
+]
+
 
 def render_style_config(pixelle_video):
     """Render style configuration section (middle column)"""
@@ -731,6 +745,14 @@ def render_style_config(pixelle_video):
             if saved_workflow and saved_workflow in workflow_keys:
                 default_workflow_index = workflow_keys.index(saved_workflow)
         
+            media_width = st.session_state.get('template_media_width')
+            media_height = st.session_state.get('template_media_height')
+            if template_media_type == "video":
+                size_info_text = tr('style.video_size_info', width=media_width, height=media_height)
+            else:
+                size_info_text = tr('style.image_size_info', width=media_width, height=media_height)
+            st.info(f"📐 {size_info_text}")
+        
             workflow_display = st.selectbox(
                 tr('style.select_model'),
                 workflow_options if workflow_options else ["No workflows found"],
@@ -738,39 +760,40 @@ def render_style_config(pixelle_video):
                 key="media_workflow_select"
             )
         
-            # Get the actual workflow key (e.g., "runninghub/image_flux.json")
             if workflow_options:
                 workflow_selected_index = workflow_options.index(workflow_display)
                 workflow_key = workflow_keys[workflow_selected_index]
             else:
                 workflow_key = "runninghub/image_flux.json"  # fallback
             
-            # Check and warn for selfhost media workflow (auto popup if not confirmed)
             check_and_warn_selfhost_workflow(workflow_key)
         
-            # Get media size from template
-            media_width = st.session_state.get('template_media_width')
-            media_height = st.session_state.get('template_media_height')
-            
-            # Display media size info (read-only)
-            if template_media_type == "video":
-                size_info_text = tr('style.video_size_info', width=media_width, height=media_height)
-            else:
-                size_info_text = tr('style.image_size_info', width=media_width, height=media_height)
-            st.info(f"📐 {size_info_text}")
-        
-            # Prompt prefix input
-            # Get current prompt_prefix from config (based on media type)
             current_prefix = comfyui_config.get(media_config_key, {}).get("prompt_prefix", "")
-        
-            # Prompt prefix input (temporary, not saved to config)
-            prompt_prefix = st.text_area(
+
+            preset_labels = [p[1] for p in PROMPT_PREFIX_PRESETS]
+            preset_prefixes = [p[2] for p in PROMPT_PREFIX_PRESETS]
+
+            def on_preset_change():
+                idx = preset_labels.index(st.session_state.prompt_prefix_preset_select)
+                st.session_state.prompt_prefix_text_area = preset_prefixes[idx]
+
+            st.selectbox(
                 tr('style.prompt_prefix'),
-                value=current_prefix,
+                preset_labels,
+                index=0,
+                key="prompt_prefix_preset_select",
+                on_change=on_preset_change
+            )
+
+            if "prompt_prefix_text_area" not in st.session_state:
+                st.session_state.prompt_prefix_text_area = current_prefix
+
+            prompt_prefix = st.text_area(
+                "",
+                key="prompt_prefix_text_area",
                 placeholder=tr("style.prompt_prefix_placeholder"),
-                height=80,
-                label_visibility="visible",
-                help=tr("style.prompt_prefix_help")
+                height=120,
+                label_visibility="collapsed"
             )
         
             # Media preview expander

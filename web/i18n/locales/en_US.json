@@ -57,6 +57,7 @@
     "style.prompt_prefix_how": "Enter style description in the input box below. To save permanently, edit the config.yaml file",
     "style.prompt_prefix_placeholder": "Enter style prefix (leave empty for config default)",
     "style.prompt_prefix_help": "This text will be automatically added before all image generation prompts. To permanently change, edit config.yaml",
+    "style.prompt_prefix_preset_none": "None",
     "style.custom": "Custom",
     "style.description": "Style Description",
     "style.description_placeholder": "Describe the illustration style you want (any language)...",
