@@ -50,3 +50,15 @@ ComfyKit 是 ComfyUI 生态的通用客户端，RunningHub 底层也跑的是 Co
 - 视频叠加 → AI 生成（消耗视频额度）
 模板的作用是排版布局，即视频该放在画面哪个位置、多大尺寸、标题文字怎么排——而不是决定"要不要生成视频"。
 所以"分镜类型"决定的是生成什么媒体，"模板"决定的是这些媒体在画面里怎么摆放。
+
+
+# 快速创作-分镜类型-生成插图
+提示词在：/Users/azm/MyProject/Pixelle-Video/config.yaml 工作流ID：workflows/runninghub/image_Z-image.json #旧的ID=1995319131513794562
+
+/*
+    <meta name="template:media-width" content="1024"> #图片宽度 
+    <meta name="template:media-height" content="1024"> # 图片高度
+    <meta name="viewport" content="width=1080, height=1920"> # 浏览器视口大小，用于渲染时模拟
+ */
+
+ 
