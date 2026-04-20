@@ -28,14 +28,6 @@ if str(_project_root) not in sys.path:
 
 import streamlit as st
 
-# Setup page config (must be first Streamlit command)
-st.set_page_config(
-    page_title="Pixelle-Video - AI Video Generator",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
 
 def main():
     """Main entry point with navigation"""
@@ -46,15 +38,32 @@ def main():
         icon="🎬",
         default=True
     )
-    
+
     history_page = st.Page(
         "pages/2_📚_History.py",
         title="History",
         icon="📚"
     )
-    
+
+    # Pipeline pages (sorted by display order)
+    pipeline_pages = [
+        st.Page("pages/2_Quick_Create.py", title="Quick Create", icon="⚡"),
+        st.Page("pages/3_Custom_Media.py", title="Custom Media", icon="🎨"),
+        st.Page("pages/4_Digital_Human.py", title="Digital Human", icon="🤖"),
+        st.Page("pages/5_Image_To_Video.py", title="Image to Video", icon="🎥"),
+        st.Page("pages/6_Action_Transfer.py", title="Action Transfer", icon="💃"),
+        st.Page("pages/7_Video_LipSync.py", title="Video LipSync", icon="🎙️"),
+        st.Page("pages/8_Douyin_Parser.py", title="Douyin Parser", icon="🔍"),
+    ]
+
     # Set up navigation and run
-    pg = st.navigation([home_page, history_page])
+    pg = st.navigation(
+        {
+            "": [home_page],
+            "📺 Pipelines": pipeline_pages,
+            "🗂️ History": [history_page],
+        }
+    )
     pg.run()
 
 

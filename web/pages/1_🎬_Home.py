@@ -1,23 +1,6 @@
-# Copyright (C) 2025 AIDC-AI
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""
-Home Page - Main video generation interface
-"""
-
 import sys
 from pathlib import Path
 
-# Add project root to sys.path
 _script_dir = Path(__file__).resolve().parent
 _project_root = _script_dir.parent.parent
 if str(_project_root) not in sys.path:
@@ -25,15 +8,13 @@ if str(_project_root) not in sys.path:
 
 import streamlit as st
 
-# Import state management
 from web.state.session import init_session_state, init_i18n, get_pixelle_video
-
-# Import components
 from web.components.header import render_header
 from web.components.settings import render_advanced_settings
 from web.components.faq import render_faq_sidebar
+from web.i18n import tr
+from web.pipelines import get_all_pipeline_uis
 
-# Page config
 st.set_page_config(
     page_title="Home - Pixelle-Video",
     page_icon="🎬",
@@ -43,47 +24,62 @@ st.set_page_config(
 
 
 def main():
-    """Main UI entry point"""
-    # Initialize session state and i18n
     init_session_state()
     init_i18n()
-    
-    # Render header (title + language selector)
+
     render_header()
-    
-    # Render FAQ in sidebar
     render_faq_sidebar()
-    
-    # Initialize Pixelle-Video
-    pixelle_video = get_pixelle_video()
-    
-    # Render system configuration (LLM + ComfyUI)
+    get_pixelle_video()
     render_advanced_settings()
-    
-    # ========================================================================
-    # Pipeline Selection & Delegation
-    # ========================================================================
-    from web.pipelines import get_all_pipeline_uis
-    
-    # Get all registered pipelines
+
+    st.markdown("---")
+    st.markdown(f"### {tr('nav.choose_pipeline')}")
+
     pipelines = get_all_pipeline_uis()
-    
-    # Use Tabs for pipeline selection
-    # Note: st.tabs returns a list of containers, one for each tab
-    tab_labels = [f"{p.icon} {p.display_name}" for p in pipelines]
-    tabs = st.tabs(tab_labels)
-    
-    # Render each pipeline in its corresponding tab
-    for i, pipeline in enumerate(pipelines):
-        with tabs[i]:
-            # Show description if available
-            if pipeline.description:
-                st.caption(pipeline.description)
-            
-            # Delegate rendering
-            pipeline.render(pixelle_video)
+
+    name_order = [
+        "quick_create", "custom_media", "digital_human",
+        "image_to_video", "action_transfer", "video_lipsync",
+        "douyin_parser"
+    ]
+    sorted_pipelines = sorted(
+        pipelines,
+        key=lambda p: name_order.index(p.name) if p.name in name_order else 99
+    )
+
+    name_to_page = {
+        "quick_create": "pages/2_Quick_Create.py",
+        "custom_media": "pages/3_Custom_Media.py",
+        "digital_human": "pages/4_Digital_Human.py",
+        "image_to_video": "pages/5_Image_To_Video.py",
+        "action_transfer": "pages/6_Action_Transfer.py",
+        "video_lipsync": "pages/7_Video_LipSync.py",
+        "douyin_parser": "pages/8_Douyin_Parser.py",
+    }
+
+    cols = st.columns(2)
+    for i, pipeline in enumerate(sorted_pipelines):
+        with cols[i % 2]:
+            page_path = name_to_page.get(pipeline.name, "")
+
+            with st.container(border=True):
+                col_icon, col_text = st.columns([1, 20])
+                with col_icon:
+                    st.markdown(
+                        f"<div style='font-size:2rem;text-align:center;'>{pipeline.icon}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_text:
+                    st.markdown(f"**{pipeline.display_name}**")
+                    st.caption(pipeline.description or "")
+
+            st.page_link(
+                page_path,
+                label=tr("nav.go_to"),
+                icon=pipeline.icon,
+                use_container_width=True,
+            )
 
 
 if __name__ == "__main__":
     main()
-

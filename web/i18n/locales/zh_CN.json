@@ -572,6 +572,8 @@
     "douyin_parser.btn_copy_markdown": "复制 MD",
     "douyin_parser.need_whisper": "首次使用需先运行: uv run pip install faster-whisper，然后重启应用。",
     "douyin_parser.how_to_use": "使用说明",
-    "douyin_parser.usage_steps": "1. 复制抖音视频的分享链接\n2. 粘贴到输入框\n3. 点击「获取信息」预览视频详情\n4. 点击「提取文案」解析文案\n5. 复制文案或下载 Markdown 文件"
+    "douyin_parser.usage_steps": "1. 复制抖音视频的分享链接\n2. 粘贴到输入框\n3. 点击「获取信息」预览视频详情\n4. 点击「提取文案」解析文案\n5. 复制文案或下载 Markdown 文件",
+    "nav.choose_pipeline": "选择流水线",
+    "nav.go_to": "进入流水线"
   }
 }

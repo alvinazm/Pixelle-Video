@@ -76,7 +76,7 @@ TTS 服务的 WORKFLOW_PREFIX = "tts_"，所以只有 tts_*.json 才会被识别
 - runninghub上不需要设置是否收费，只要发布被调用、被使用就会有额外收益
 - 使用其他人的api也是要额外付费的 
 - 视频对口型workflow前缀：lip_sync_video_
+- 图片对口型，不需要；先通过图片生成视频，然后再对口型即可
 
 # MY_TODO
 - 获取抖音视频文案
-- 图片对口型口播

@@ -572,6 +572,8 @@
     "douyin_parser.btn_copy_markdown": "Copy MD",
     "douyin_parser.need_whisper": "First time use: run `pip install faster-whisper` in the project environment, then restart.",
     "douyin_parser.how_to_use": "How to Use",
-    "douyin_parser.usage_steps": "1. Copy a Douyin share link\n2. Paste it into the input box\n3. Click **Get Info** to preview video details\n4. Click **Extract Script** to get the video script via ASR\n5. Copy the script or download it as a Markdown file"
+    "douyin_parser.usage_steps": "1. Copy a Douyin share link\n2. Paste it into the input box\n3. Click **Get Info** to preview video details\n4. Click **Extract Script** to get the video script via ASR\n5. Copy the script or download it as a Markdown file",
+    "nav.choose_pipeline": "Choose a Pipeline",
+    "nav.go_to": "Go to Pipeline"
   }
 }
