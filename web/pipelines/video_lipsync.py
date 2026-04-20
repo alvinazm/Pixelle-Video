@@ -302,7 +302,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                 if not os.path.isdir(dir_path):
                     continue
                 for fname in os.listdir(dir_path):
-                    if fname.startswith("video_voc_") and fname.endswith(".json"):
+                    if fname.startswith("lip_sync_video_") and fname.endswith(".json"):
                         label = "RunningHub" if source == "runninghub" else "Selfhost"
                         lipsync_workflows.append({
                             "key": f"{source}/{fname}",
@@ -312,11 +312,11 @@ class VideoLipSyncPipelineUI(PipelineUI):
             default_idx = 0
             if not workflow_options:
                 workflow_options = [tr("video_lipsync.no_lipsync_workflows")]
-                workflow_key = "runninghub/video_voc_latentsync1.5.json"
+                workflow_key = "runninghub/lip_sync_video_latentsync1.5.json"
             else:
                 default_idx = next(
                     (i for i, wf in enumerate(lipsync_workflows)
-                     if wf["key"] == "runninghub/video_voc_latentsync1.5.json"), 0
+                     if wf["key"] == "runninghub/lip_sync_video_latentsync1.5.json"), 0
                 )
             workflow_display = st.selectbox(
                 tr("video_lipsync.workflow"),
@@ -324,7 +324,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                 index=default_idx,
                 key="lipsync_workflow_select"
             )
-            workflow_key = "runninghub/video_voc_latentsync1.5.json"
+            workflow_key = "runninghub/lip_sync_video_latentsync1.5.json"
             for wf in lipsync_workflows:
                 if wf["display"] == workflow_display:
                     workflow_key = wf["key"]
@@ -435,7 +435,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                             params.get("seed", 1234),
                             params.get("lips_expression", 1.5),
                             params.get("inference_steps", 25),
-                            params.get("workflow_key", "runninghub/video_voc_latentsync1.5.json"),
+                            params.get("workflow_key", "runninghub/lip_sync_video_latentsync1.5.json"),
                             task_dir,
                         )
 
@@ -549,7 +549,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
         import httpx, time
         from comfykit.comfyui.runninghub_client import RunningHubClient
 
-        with open("workflows/runninghub/video_voc_latentsync1.5.json") as f:
+        with open("workflows/runninghub/lip_sync_video_latentsync1.5.json") as f:
             wf_config = json.load(f)
         workflow_id = wf_config["workflow_id"]
 
