@@ -26,17 +26,17 @@ from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
 from pixelle_video.config import config_manager
 
 PROMPT_PREFIX_PRESETS = [
-    ("cartoon", "卡通风格", "Pixar and DreamWorks animation style, vibrant saturated colors, smooth 3D renders, whimsical and playful atmosphere, soft ambient lighting, rounded forms, family-friendly, high detail, 8k resolution"),
-    ("realistic", "写实风格", "photorealistic, ultra-detailed, hyperrealism, studio lighting, shallow depth of field, natural skin textures, cinematic composition, DSLR quality, RAW photo, 8k resolution"),
-    ("watercolor", "水彩画", "watercolor painting, soft wet-on-wet technique, delicate bleeding colors, translucent washes, paper texture visible, ethereal and dreamlike atmosphere, fine art quality, minimalist composition"),
-    ("cyberpunk", "赛博朋克", "cyberpunk aesthetic, neon-lit streets, futuristic cityscape, rain-slicked surfaces, holographic advertisements, chrome and leather, high-tech low-life atmosphere, volumetric fog, cinematic color grading, blade runner style"),
-    ("chinese_ink", "古风水墨", "traditional Chinese ink wash painting, Shanshui style, minimalist brushwork, poetic and serene, misty mountains, subtle gradations of black and grey, rice paper texture, classical East Asian aesthetics, contemplative mood"),
-    ("oil_painting", "油画风格", "classical oil painting, impressionist technique, rich impasto textures, warm golden hour lighting, museum quality, visible brushstrokes, master painter style, dramatic chiaroscuro, velvet color palette, timeless elegance"),
-    ("anime", "日漫风", "Japanese anime style, Studio Ghibli inspired, cel shading, soft watercolor backgrounds, gentle and heartwarming atmosphere, detailed character design, lush green environments, Miyazaki aesthetic, hand-painted quality"),
-    ("shinkai", "新海诚风", "By Makoto Shinkai, digital painting, anime style, high contrast, vibrant color palette, hyper-detailed, crystal clear, cinematic composition, sunbeams and lens flare, dramatic lighting, serene and healing atmosphere, 8k resolution"),
-    ("3d_render", "3D渲染", "3D render, octane ray tracing, studio product photography lighting, hyper-detailed textures, clean and crisp, professional CGI, subsurface scattering, soft shadows, commercial quality, 8k resolution"),
-    ("pixel_art", "像素风格", "pixel art, 16-bit retro game aesthetic, vibrant colors, clean pixel grid, isometric or side-view composition, nostalgic gaming atmosphere, Final Fantasy and Chrono Trigger inspired, charming and detailed sprites"),
-    ("comic", "美漫画风", "American comic book style, bold black outlines, halftone dot screening, vibrant flat colors, Marvel and DC influenced, dynamic action poses, dramatic perspective, splash page quality, comic panel composition"),
+    ("cartoon", "style.prompt_prefix_preset_cartoon", "Pixar and DreamWorks animation style, vibrant saturated colors, smooth 3D renders, whimsical and playful atmosphere, soft ambient lighting, rounded forms, family-friendly, high detail, 8k resolution"),
+    ("realistic", "style.prompt_prefix_preset_realistic", "photorealistic, ultra-detailed, hyperrealism, studio lighting, shallow depth of field, natural skin textures, cinematic composition, DSLR quality, RAW photo, 8k resolution"),
+    ("watercolor", "style.prompt_prefix_preset_watercolor", "watercolor painting, soft wet-on-wet technique, delicate bleeding colors, translucent washes, paper texture visible, ethereal and dreamlike atmosphere, fine art quality, minimalist composition"),
+    ("cyberpunk", "style.prompt_prefix_preset_cyberpunk", "cyberpunk aesthetic, neon-lit streets, futuristic cityscape, rain-slicked surfaces, holographic advertisements, chrome and leather, high-tech low-life atmosphere, volumetric fog, cinematic color grading, blade runner style"),
+    ("chinese_ink", "style.prompt_prefix_preset_chinese_ink", "traditional Chinese ink wash painting, Shanshui style, minimalist brushwork, poetic and serene, misty mountains, subtle gradations of black and grey, rice paper texture, classical East Asian aesthetics, contemplative mood"),
+    ("oil_painting", "style.prompt_prefix_preset_oil_painting", "classical oil painting, impressionist technique, rich impasto textures, warm golden hour lighting, museum quality, visible brushstrokes, master painter style, dramatic chiaroscuro, velvet color palette, timeless elegance"),
+    ("anime", "style.prompt_prefix_preset_anime", "Japanese anime style, Studio Ghibli inspired, cel shading, soft watercolor backgrounds, gentle and heartwarming atmosphere, detailed character design, lush green environments, Miyazaki aesthetic, hand-painted quality"),
+    ("shinkai", "style.prompt_prefix_preset_shinkai", "By Makoto Shinkai, digital painting, anime style, high contrast, vibrant color palette, hyper-detailed, crystal clear, cinematic composition, sunbeams and lens flare, dramatic lighting, serene and healing atmosphere, 8k resolution"),
+    ("3d_render", "style.prompt_prefix_preset_3d_render", "3D render, octane ray tracing, studio product photography lighting, hyper-detailed textures, clean and crisp, professional CGI, subsurface scattering, soft shadows, commercial quality, 8k resolution"),
+    ("pixel_art", "style.prompt_prefix_preset_pixel_art", "pixel art, 16-bit retro game aesthetic, vibrant colors, clean pixel grid, isometric or side-view composition, nostalgic gaming atmosphere, Final Fantasy and Chrono Trigger inspired, charming and detailed sprites"),
+    ("comic", "style.prompt_prefix_preset_comic", "American comic book style, bold black outlines, halftone dot screening, vibrant flat colors, Marvel and DC influenced, dynamic action poses, dramatic perspective, splash page quality, comic panel composition"),
 ]
 
 
@@ -770,26 +770,39 @@ def render_style_config(pixelle_video):
         
             current_prefix = comfyui_config.get(media_config_key, {}).get("prompt_prefix", "")
 
-            preset_labels = [p[1] for p in PROMPT_PREFIX_PRESETS]
+            preset_keys = [p[0] for p in PROMPT_PREFIX_PRESETS]
+            preset_labels = [tr(p[1]) for p in PROMPT_PREFIX_PRESETS]
             preset_prefixes = [p[2] for p in PROMPT_PREFIX_PRESETS]
+            preset_key_to_idx = {k: i for i, k in enumerate(preset_keys)}
 
             def on_preset_change():
-                idx = preset_labels.index(st.session_state.prompt_prefix_preset_select)
+                key = st.session_state.prompt_prefix_preset_select
+                idx = preset_key_to_idx[key]
                 st.session_state.prompt_prefix_text_area = preset_prefixes[idx]
+
+            initial_idx = 0
+            if current_prefix:
+                try:
+                    initial_idx = preset_prefixes.index(current_prefix)
+                except ValueError:
+                    pass
+
+            if "prompt_prefix_preset_select" not in st.session_state:
+                st.session_state.prompt_prefix_preset_select = preset_keys[initial_idx]
+            if "prompt_prefix_text_area" not in st.session_state:
+                st.session_state.prompt_prefix_text_area = preset_prefixes[initial_idx]
 
             st.selectbox(
                 tr('style.prompt_prefix'),
-                preset_labels,
-                index=0,
+                preset_keys,
+                index=initial_idx,
+                format_func=lambda k: preset_labels[preset_keys.index(k)],
                 key="prompt_prefix_preset_select",
                 on_change=on_preset_change
             )
 
-            if "prompt_prefix_text_area" not in st.session_state:
-                st.session_state.prompt_prefix_text_area = current_prefix
-
             prompt_prefix = st.text_area(
-                "",
+                tr("style.prompt_prefix"),
                 key="prompt_prefix_text_area",
                 placeholder=tr("style.prompt_prefix_placeholder"),
                 height=120,

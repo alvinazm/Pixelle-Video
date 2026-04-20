@@ -30,6 +30,7 @@ from web.pipelines import digital_human
 from web.pipelines import i2v
 from web.pipelines import action_transfer
 from web.pipelines import video_lipsync
+from web.pipelines import douyin_parser
 
 __all__ = [
     "PipelineUI",
