@@ -78,6 +78,5 @@ TTS 服务的 WORKFLOW_PREFIX = "tts_"，所以只有 tts_*.json 才会被识别
 - 视频对口型workflow前缀：lip_sync_video_
 
 # MY_TODO
-- lip_sync_video_ 前缀
 - 获取抖音视频文案
 - 图片对口型口播
