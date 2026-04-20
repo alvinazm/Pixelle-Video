@@ -62,6 +62,20 @@ templates/1080x1920/image_blur_card.html 页面中
 - meta name="template:media-height" content="1024"> # 图片高度
 - meta name="viewport" content="width=1080, height=1920"> # 浏览器视口大小，用于渲染时模拟
  
+ # 如何加载工作流
+ 扫描逻辑在 comfy_base_service.py 的 _scan_workflows 方法中：
+matching_files = [
+    f for f in workflow_files 
+    if f.startswith(self.WORKFLOW_PREFIX) and f.endswith('.json')
+]
+TTS 服务的 WORKFLOW_PREFIX = "tts_"，所以只有 tts_*.json 才会被识别。
+你的 my_tts_spark.json 前缀是 my_，不在扫描范围内。
+
+
+# 工作流付费
+- runninghub上不需要设置是否收费，只要发布被调用、被使用就会有额外收益
+- 使用其他人的api也是要额外付费的 
+
 # TODO
 - 更换工作流ID
 - 口播视频，对口型
