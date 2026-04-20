@@ -13,10 +13,11 @@
 
 import json
 import re
-import tempfile
+import shutil
 import subprocess
-import time
+import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,21 +27,14 @@ from loguru import logger
 
 from web.i18n import tr
 from web.pipelines.base import PipelineUI, register_pipeline_ui
+from pixelle_video.config import config_manager
 
 _whisper_model = None
 _whisper_lock = threading.Lock()
 
-
-def _get_whisper_model():
-    global _whisper_model
-    if _whisper_model is None:
-        with _whisper_lock:
-            if _whisper_model is None:
-                from faster_whisper import WhisperModel
-                logger.info("[抖音解析] 首次加载 Whisper 模型...")
-                _whisper_model = WhisperModel("base", device="auto", compute_type="auto")
-                logger.info("[抖音解析] Whisper 模型加载完成，已缓存")
-    return _whisper_model
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1"
+}
 
 
 def _extract_url(text: str) -> Optional[str]:
@@ -64,26 +58,19 @@ def _validate_url(url: str) -> Optional[str]:
     return None
 
 
-def _resolve_short_url(url: str) -> str:
+def _get_video_info(url: str) -> dict:
+    t_all = time.time()
+    logger.info("[抖音解析] === 开始解析 ===")
+
     if "v.douyin.com" in url:
         with httpx.Client(follow_redirects=True, timeout=10.0) as client:
-            resp = client.head(url)
+            resp = client.head(url, follow_redirects=True)
             resolved = str(resp.url)
             if "douyin.com/video/" in resolved or "iesdouyin.com/share/video/" in resolved:
-                return resolved
-            raise RuntimeError(f"Short link did not resolve to video: {resolved}")
-    return url
-
-
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1"
-}
-
-
-def _get_video_info(url: str) -> dict:
-    t0 = time.time()
-    logger.info("[抖音解析] 开始解析视频信息...")
-    url = _resolve_short_url(url)
+                logger.info(f"[抖音解析] 短链接解析: {url} -> {resolved}")
+                url = resolved
+            else:
+                raise RuntimeError(f"Short link did not resolve to video: {resolved}")
 
     if "/video/" in url or "iesdouyin.com/share/video/" in url:
         parts = url.split("?")[0].strip("/").split("/")
@@ -92,9 +79,12 @@ def _get_video_info(url: str) -> dict:
     else:
         raise RuntimeError("Unsupported Douyin URL format")
 
+    t_fetch = time.time()
+    logger.info(f"[抖音解析] 获取页面 HTML... (URL: {url[:60]})")
     with httpx.Client(timeout=15.0, headers=_HEADERS) as client:
         resp = client.get(url)
         resp.raise_for_status()
+    logger.info(f"[抖音解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
 
     pattern = re.compile(r"window\._ROUTER_DATA\s*=\s*(.*?)</script>", re.DOTALL)
     match = pattern.search(resp.text)
@@ -115,64 +105,219 @@ def _get_video_info(url: str) -> dict:
     video_url = item["video"]["play_addr"]["url_list"][0].replace("playwm", "play")
     title = item.get("desc", "").strip() or f"douyin_{video_id}"
 
-    logger.info(f"[抖音解析] 解析完成, 耗时 {time.time()-t0:.1f}s, 标题: {title[:30]}")
+    total = time.time() - t_all
+    logger.info(f"[抖音解析] === 解析完成 === 总耗时 {total:.1f}s, 标题: {title[:30]}")
 
     return {
-        "title": re.sub(r"[\\/:*?\"<>|]", "_", title),
+        "title": re.sub(r"[\\\\/:*?\"<>|]", "_", title),
         "url": video_url,
         "webpage_url": url,
     }
 
 
-def _extract_text_asr(video_url: str) -> str:
+def _get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        with _whisper_lock:
+            if _whisper_model is None:
+                from faster_whisper import WhisperModel
+                t0 = time.time()
+                logger.info("[抖音解析] 加载 Whisper 模型 (base)...")
+                _whisper_model = WhisperModel("base", device="auto", compute_type="auto")
+                logger.info(f"[抖音解析] 模型加载完成, 耗时 {time.time()-t0:.1f}s")
+    return _whisper_model
 
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        mp4_path = tmp_path / "video.mp4"
-        wav_path = tmp_path / "audio.wav"
 
-        logger.info("[抖音解析] 开始下载视频...")
-        t0 = time.time()
-        with httpx.Client(follow_redirects=True, timeout=60.0, headers=_HEADERS) as client:
-            with client.stream("GET", video_url) as resp:
-                resp.raise_for_status()
-                with open(mp4_path, "wb") as f:
-                    for chunk in resp.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
-        size_mb = mp4_path.stat().st_size / 1024 / 1024
-        logger.info(f"[抖音解析] 视频下载完成 {size_mb:.1f}MB, 耗时 {time.time()-t0:.1f}s")
-
-        logger.info("[抖音解析] 开始提取音频...")
-        t1 = time.time()
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(mp4_path), "-vn", "-acodec", "pcm_s16le",
-             "-ar", "16000", "-ac", "1", str(wav_path)],
-            capture_output=True, timeout=120,
-        )
-        if not wav_path.exists():
-            raise RuntimeError("ffmpeg audio extraction failed")
-        logger.info(f"[抖音解析] 音频提取完成, 耗时 {time.time()-t1:.1f}s")
-
-        logger.info("[抖音解析] 获取 Whisper 模型...")
-        t2 = time.time()
-        model = _get_whisper_model()
-        logger.info(f"[抖音解析] 模型就绪 (缓存), 耗时 {time.time()-t2:.1f}s")
-
-        logger.info("[抖音解析] 开始语音转写...")
-        t3 = time.time()
-        segments, _ = model.transcribe(str(wav_path), language="zh", beam_size=5)
-        logger.info(f"[抖音解析] 语音转写完成, 耗时 {time.time()-t3:.1f}s")
-        text = "".join(seg.text for seg in segments)
-
-        logger.info(f"[抖音解析] 总耗时 {time.time()-t0:.1f}s, 输出字符数 {len(text)}")
-
+def _prewarm_model():
+    def _background_load():
         try:
-            import zhconv
-            text = zhconv.convert(text, "zh-hans")
-        except ImportError:
-            pass
+            _get_whisper_model()
+            logger.info("[抖音解析] 模型预热完成")
+        except Exception as e:
+            logger.warning(f"[抖音解析] 模型预热失败: {e}")
+    thread = threading.Thread(target=_background_load, daemon=True)
+    thread.start()
 
-        return text
+
+def _transcribe_api(video_url: str, api_endpoint: str, api_key: str, model: str) -> str:
+    t_all = time.time()
+    logger.info(f"[抖音解析] === API 模式 === ({api_endpoint})")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="douyin_api_"))
+    mp4_path = tmp_dir / "video.mp4"
+    mp3_path = tmp_dir / "audio.mp3"
+
+    t_dl = time.time()
+    logger.info("[抖音解析] [1/4] 下载视频...")
+    with httpx.Client(follow_redirects=True, timeout=120.0, headers=_HEADERS) as client:
+        with client.stream("GET", video_url) as resp:
+            resp.raise_for_status()
+            with open(mp4_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=65536):
+                    f.write(chunk)
+    size_mb = mp4_path.stat().st_size / 1024 / 1024
+    logger.info(f"[抖音解析] [1/4] 下载完成 {size_mb:.1f}MB, {time.time()-t_dl:.1f}s")
+
+    t_audio = time.time()
+    logger.info("[抖音解析] [2/4] 提取音频...")
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(mp4_path), "-vn",
+         "-acodec", "libmp3lame", "-b:a", "32k",
+         "-ar", "16000", "-ac", "1", str(mp3_path)],
+        capture_output=True, timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')[-200:]}")
+    logger.info(f"[抖音解析] [2/4] 音频完成, {mp3_path.stat().st_size/1024:.0f}KB, {time.time()-t_audio:.1f}s")
+
+    import base64
+    audio_b64 = base64.b64encode(mp3_path.read_bytes()).decode()
+    logger.info(f"[抖音解析] Base64: {len(audio_b64)/1024:.0f}KB")
+
+    t_api = time.time()
+    logger.info(f"[抖音解析] [3/4] API 转写...")
+
+    is_dashscope = "dashscope" in api_endpoint.lower()
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    if is_dashscope:
+        audio_duration_sec = float(
+            subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(mp3_path)],
+                capture_output=True, text=True,
+            ).stdout.strip() or 0
+        )
+
+        if audio_duration_sec > 270:
+            logger.info(f"[抖音解析] 音频超过 270s，分段处理...")
+            chunk_duration = 240
+            all_text = []
+            for i in range(0, int(audio_duration_sec) + 1, chunk_duration):
+                chunk_path = tmp_dir / f"chunk_{i}.mp3"
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(mp3_path), "-ss", str(i),
+                     "-t", str(chunk_duration), "-acodec", "copy", str(chunk_path)],
+                    capture_output=True, timeout=60,
+                )
+                chunk_b64 = base64.b64encode(chunk_path.read_bytes()).decode()
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": [{
+                        "type": "input_audio",
+                        "input_audio": f"data:audio/mpeg;base64,{chunk_b64}"
+                    }]}],
+                    "stream": False,
+                }
+                resp = httpx.post(api_endpoint, json=payload, headers=headers, timeout=120)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+                chunk_text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                if chunk_text:
+                    all_text.append(chunk_text)
+                logger.info(f"[抖音解析] 分段 {i//chunk_duration + 1} 完成: {len(chunk_text)}字")
+            text = "".join(all_text)
+        else:
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": [{
+                    "type": "input_audio",
+                    "input_audio": f"data:audio/mpeg;base64,{audio_b64}"
+                }]}],
+                "stream": False,
+            }
+            resp = httpx.post(api_endpoint, json=payload, headers=headers, timeout=120)
+            if resp.status_code != 200:
+                raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+            text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    else:
+        headers.pop("Content-Type")
+        with open(mp3_path, "rb") as f:
+            form_data = {"model": model}
+            files = {"file": ("audio.mp3", f, "audio/mpeg")}
+            with httpx.Client(timeout=120.0) as client:
+                resp = client.post(api_endpoint, files=files, data=form_data, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+        text = resp.json().get("text", "").strip()
+
+    logger.info(f"[抖音解析] [4/4] 转写完成, {len(text)}字, {time.time()-t_api:.1f}s")
+
+    total = time.time() - t_all
+    logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
+
+    out_dir = Path("output/download_video")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"douyin_{int(time.time())}.mp4"
+    shutil.copy2(mp4_path, out_path)
+    logger.info(f"[抖音解析] 视频已保存: {out_path}")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return text
+
+
+def _extract_text_asr(video_url: str) -> str:
+    t_all = time.time()
+    logger.info("[抖音解析] === 本地模式提取文案 ===")
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="douyin_"))
+    mp4_path = tmp_dir / "video.mp4"
+    wav_path = tmp_dir / "audio.wav"
+
+    t_dl = time.time()
+    logger.info("[抖音解析] [1/4] 下载视频...")
+    with httpx.Client(follow_redirects=True, timeout=120.0, headers=_HEADERS) as client:
+        with client.stream("GET", video_url) as resp:
+            resp.raise_for_status()
+            with open(mp4_path, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=65536):
+                    f.write(chunk)
+    size_mb = mp4_path.stat().st_size / 1024 / 1024
+    speed_mbps = size_mb / (time.time() - t_dl)
+    logger.info(f"[抖音解析] [1/4] 下载完成 {size_mb:.1f}MB, {time.time()-t_dl:.1f}s, {speed_mbps:.1f}MB/s")
+
+    t_audio = time.time()
+    logger.info("[抖音解析] [2/4] 提取音频...")
+    ffmpeg_result = subprocess.run(
+        ["ffmpeg", "-y", "-i", str(mp4_path), "-vn", "-acodec", "pcm_s16le",
+         "-ar", "16000", "-ac", "1", str(wav_path)],
+        capture_output=True, timeout=120,
+    )
+    if ffmpeg_result.returncode != 0:
+        err = ffmpeg_result.stderr.decode(errors="replace")[-200:]
+        raise RuntimeError(f"ffmpeg failed: {err}")
+    logger.info(f"[抖音解析] [2/4] 音频完成, {time.time()-t_audio:.1f}s")
+
+    t_model = time.time()
+    logger.info("[抖音解析] [3/4] 加载模型...")
+    model = _get_whisper_model()
+    logger.info(f"[抖音解析] [3/4] 模型就绪, {time.time()-t_model:.1f}s")
+
+    t_asr = time.time()
+    logger.info("[抖音解析] [4/4] 语音转写...")
+    segments, info = model.transcribe(str(wav_path), language="zh", beam_size=5)
+    text = "".join(seg.text for seg in segments)
+    duration_s = info.duration
+    rtf = (time.time() - t_asr) / duration_s if duration_s > 0 else 0
+    logger.info(f"[抖音解析] [4/4] 转写完成, 时长 {duration_s:.0f}s, RTF={rtf:.3f}, {time.time()-t_asr:.1f}s, {len(text)}字")
+
+    try:
+        import zhconv
+        text = zhconv.convert(text, "zh-hans")
+        logger.info(f"[抖音解析] 简繁转换完成, {len(text)}字")
+    except ImportError:
+        logger.warning("[抖音解析] zhconv 未安装, 跳过简繁转换")
+
+    total = time.time() - t_all
+    logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
+
+    out_dir = Path("output/download_video")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"douyin_{int(time.time())}.mp4"
+    shutil.copy2(mp4_path, out_path)
+    logger.info(f"[抖音解析] 视频已保存: {out_path}")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return text
 
 
 class DouyinParserPipelineUI(PipelineUI):
@@ -188,6 +333,66 @@ class DouyinParserPipelineUI(PipelineUI):
         return tr("pipeline.douyin_parser.description")
 
     def render(self, pixelle_video: Any):
+        cfg = config_manager.get_douyin_parser_config()
+        if cfg["asr_mode"] == "local":
+            _prewarm_model()
+        mode_local = tr("douyin_parser.mode_local")
+        mode_api = tr("douyin_parser.mode_api")
+        default_mode_index = 0 if cfg["asr_mode"] == "local" else 1
+
+        with st.expander(tr("douyin_parser.asr_config"), expanded=False):
+            c1, c2, c3 = st.columns([2, 2, 1])
+            with c1:
+                asr_mode_display = st.radio(
+                    tr("douyin_parser.asr_mode"),
+                    [mode_local, mode_api],
+                    index=default_mode_index,
+                    horizontal=True,
+                    key="douyin_asr_mode",
+                )
+            with c2:
+                if asr_mode_display == mode_api:
+                    api_endpoint = st.text_input(
+                        tr("douyin_parser.api_endpoint"),
+                        value=cfg.get("api_endpoint", ""),
+                        placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                        key="douyin_api_endpoint",
+                    )
+                else:
+                    st.text_input(tr("douyin_parser.local_model"), value="base", disabled=True)
+            with c3:
+                if asr_mode_display == mode_api:
+                    api_key = st.text_input(
+                        tr("douyin_parser.api_key"),
+                        value=cfg.get("api_key", ""),
+                        type="password",
+                        key="douyin_api_key",
+                    )
+                else:
+                    st.text_input("CPU 线程", value="12", disabled=True)
+
+            if asr_mode_display == mode_api:
+                c4, c5 = st.columns([2, 1])
+                with c4:
+                    st.text_input(
+                        tr("douyin_parser.api_model"),
+                        value=cfg.get("api_model", "qwen3-asr-flash"),
+                        placeholder="qwen3-asr-flash",
+                        key="douyin_api_model",
+                    )
+                with c5:
+                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                    if st.button("💾 保存", key="douyin_save_config", use_container_width=True):
+                        config_manager.set_douyin_parser_config(
+                            asr_mode="api",
+                            api_endpoint=st.session_state.get("douyin_api_endpoint", ""),
+                            api_key=st.session_state.get("douyin_api_key", ""),
+                            api_model=st.session_state.get("douyin_api_model", "qwen3-asr-flash"),
+                        )
+                        config_manager.save()
+                        st.success("✅ 配置已保存")
+                        st.rerun()
+
         url_input = st.text_area(
             tr("douyin_parser.url_label"),
             placeholder="https://v.douyin.com/xxxxx  or  https://www.douyin.com/video/xxxxx",
@@ -201,24 +406,29 @@ class DouyinParserPipelineUI(PipelineUI):
             if st.button(tr("douyin_parser.btn_parse_info"), use_container_width=True, type="secondary"):
                 if not url_input:
                     st.warning(tr("douyin_parser.url_required"))
-                else:
-                    url = _extract_url(url_input)
-                    if not url:
-                        st.warning(tr("douyin_parser.url_invalid"))
-                    else:
-                        url_type = _validate_url(url)
-                        if url_type == "search":
-                            st.error(tr("douyin_parser.url_search_page"))
-                        elif url_type == "video":
-                            with st.spinner(tr("douyin_parser.status_parsing")):
-                                try:
-                                    info = _get_video_info(url)
-                                    st.session_state["douyin_info"] = info
-                                    st.session_state["douyin_video_url"] = info.get("url") or info.get("webpage_url", "")
-                                    st.session_state["douyin_title"] = info.get("title", "")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"{tr('douyin_parser.error')}: {e}")
+                    return
+                url = _extract_url(url_input)
+                if not url:
+                    st.warning(tr("douyin_parser.url_invalid"))
+                    return
+                url_type = _validate_url(url)
+                if url_type == "search":
+                    st.error(tr("douyin_parser.url_search_page"))
+                    return
+
+                progress_area = st.empty()
+                progress_area.info("⏳ 正在解析视频信息...")
+                try:
+                    info = _get_video_info(url)
+                    st.session_state["douyin_info"] = info
+                    st.session_state["douyin_video_url"] = info.get("url") or info.get("webpage_url", "")
+                    st.session_state["douyin_title"] = info.get("title", "")
+                    st.session_state["douyin_text"] = ""
+                    progress_area.success("✅ 解析完成")
+                    st.rerun()
+                except Exception as e:
+                    logger.error(f"[抖音解析] 解析失败: {e}")
+                    progress_area.error(f"❌ {e}")
 
             if "douyin_info" in st.session_state:
                 info = st.session_state["douyin_info"]
@@ -232,26 +442,59 @@ class DouyinParserPipelineUI(PipelineUI):
             if st.button(tr("douyin_parser.btn_extract_text"), use_container_width=True, type="primary"):
                 if not url_input:
                     st.warning(tr("douyin_parser.url_required"))
-                else:
-                    url = _extract_url(url_input)
-                    if not url:
-                        st.warning(tr("douyin_parser.url_invalid"))
-                    else:
-                        url_type = _validate_url(url)
-                        if url_type == "search":
-                            st.error(tr("douyin_parser.url_search_page"))
-                        elif url_type == "video":
-                            with st.spinner(tr("douyin_parser.status_extracting")):
-                                try:
-                                    info = _get_video_info(url)
-                                    video_url = info.get("url") or info.get("webpage_url", "")
-                                    text = _extract_text_asr(video_url)
-                                    st.session_state["douyin_text"] = text
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"{tr('douyin_parser.error')}: {e}")
+                    return
+                url = _extract_url(url_input)
+                if not url:
+                    st.warning(tr("douyin_parser.url_invalid"))
+                    return
+                url_type = _validate_url(url)
+                if url_type == "search":
+                    st.error(tr("douyin_parser.url_search_page"))
+                    return
 
-            if "douyin_text" in st.session_state:
+                asr_mode = "api" if asr_mode_display == mode_api else "local"
+                endpoint = st.session_state.get("douyin_api_endpoint", "")
+                api_key = st.session_state.get("douyin_api_key", "")
+                api_model = st.session_state.get("douyin_api_model", "")
+
+                if asr_mode == "api":
+                    if not endpoint or not api_key or not api_model:
+                        st.error(tr("douyin_parser.api_config_required"))
+                        return
+                    config_manager.set_douyin_parser_config(
+                        asr_mode="api",
+                        api_endpoint=endpoint,
+                        api_key=api_key,
+                        api_model=api_model,
+                    )
+                    config_manager.save()
+                else:
+                    config_manager.set_douyin_parser_config(asr_mode="local")
+                    config_manager.save()
+
+                progress_bar = st.progress(0, text="⏳ 准备中...")
+                try:
+                    progress_bar.progress(0.1, text="📡 获取视频信息...")
+                    info = _get_video_info(url)
+                    video_url = info.get("url") or info.get("webpage_url", "")
+                    st.session_state["douyin_video_url"] = video_url
+                    st.session_state["douyin_title"] = info.get("title", "")
+
+                    progress_bar.progress(0.2, text="⬇️ 下载视频中...")
+                    if asr_mode == "api":
+                        text = _transcribe_api(video_url, endpoint, api_key, api_model)
+                    else:
+                        text = _extract_text_asr(video_url)
+
+                    st.session_state["douyin_text"] = text
+                    progress_bar.progress(1.0, text="✅ 提取完成！")
+                    st.rerun()
+                except Exception as e:
+                    logger.error(f"[抖音解析] 提取失败: {e}")
+                    progress_bar.progress(1.0, text=f"❌ 提取失败: {e}")
+                    st.error(f"{tr('douyin_parser.error')}: {e}")
+
+            if "douyin_text" in st.session_state and st.session_state.get("douyin_text"):
                 text = st.session_state["douyin_text"]
                 with st.container(border=True):
                     st.markdown(f"**{tr('douyin_parser.extracted_text')}**")

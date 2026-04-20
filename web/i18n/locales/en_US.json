@@ -573,6 +573,15 @@
     "douyin_parser.need_whisper": "First time use: run `pip install faster-whisper` in the project environment, then restart.",
     "douyin_parser.how_to_use": "How to Use",
     "douyin_parser.usage_steps": "1. Copy a Douyin share link\n2. Paste it into the input box\n3. Click **Get Info** to preview video details\n4. Click **Extract Script** to get the video script via ASR\n5. Copy the script or download it as a Markdown file",
+    "douyin_parser.asr_config": "⚙️ ASR Mode",
+    "douyin_parser.asr_mode": "Mode",
+    "douyin_parser.mode_local": "Local (free, slow)",
+    "douyin_parser.mode_api": "API (fast, needs key)",
+    "douyin_parser.local_model": "Model",
+    "douyin_parser.api_endpoint": "API Endpoint",
+    "douyin_parser.api_key": "API Key",
+    "douyin_parser.api_model": "Model Name",
+    "douyin_parser.api_config_required": "Please configure API endpoint and key first",
     "nav.choose_pipeline": "Choose a Pipeline",
     "nav.go_to": "Go to Pipeline"
   }

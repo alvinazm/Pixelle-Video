@@ -22,6 +22,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+name_to_page = {
+    "quick_create": "pages/2_Quick_Create.py",
+    "custom_media": "pages/3_Custom_Media.py",
+    "digital_human": "pages/4_Digital_Human.py",
+    "image_to_video": "pages/5_Image_To_Video.py",
+    "action_transfer": "pages/6_Action_Transfer.py",
+    "video_lipsync": "pages/7_Video_LipSync.py",
+    "douyin_parser": "pages/8_Douyin_Parser.py",
+}
+
 
 def main():
     init_session_state()
@@ -47,38 +57,23 @@ def main():
         key=lambda p: name_order.index(p.name) if p.name in name_order else 99
     )
 
-    name_to_page = {
-        "quick_create": "pages/2_Quick_Create.py",
-        "custom_media": "pages/3_Custom_Media.py",
-        "digital_human": "pages/4_Digital_Human.py",
-        "image_to_video": "pages/5_Image_To_Video.py",
-        "action_transfer": "pages/6_Action_Transfer.py",
-        "video_lipsync": "pages/7_Video_LipSync.py",
-        "douyin_parser": "pages/8_Douyin_Parser.py",
-    }
-
     cols = st.columns(2)
     for i, pipeline in enumerate(sorted_pipelines):
         with cols[i % 2]:
             page_path = name_to_page.get(pipeline.name, "")
 
-            with st.container(border=True):
-                col_icon, col_text = st.columns([1, 20])
-                with col_icon:
-                    st.markdown(
-                        f"<div style='font-size:2rem;text-align:center;'>{pipeline.icon}</div>",
-                        unsafe_allow_html=True,
-                    )
-                with col_text:
-                    st.markdown(f"**{pipeline.display_name}**")
-                    st.caption(pipeline.description or "")
+            icon_col, text_col = st.columns([1, 10])
+            with icon_col:
+                st.markdown(
+                    f"<div style='font-size:2rem;text-align:center;padding-top:0.3rem'>{pipeline.icon}</div>",
+                    unsafe_allow_html=True,
+                )
+            with text_col:
+                st.markdown(f"**{pipeline.display_name}**")
+                st.caption(pipeline.description or "")
 
-            st.page_link(
-                page_path,
-                label=tr("nav.go_to"),
-                icon=pipeline.icon,
-                use_container_width=True,
-            )
+            st.page_link(page_path, label="进入", use_container_width=True)
+            st.divider()
 
 
 if __name__ == "__main__":

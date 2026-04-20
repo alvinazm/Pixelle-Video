@@ -170,3 +170,30 @@ class ConfigManager:
         if updates:
             self.update({"comfyui": updates})
 
+    def get_douyin_parser_config(self) -> dict:
+        return {
+            "asr_mode": self.config.douyin_parser.asr_mode,
+            "api_endpoint": self.config.douyin_parser.api_endpoint,
+            "api_key": self.config.douyin_parser.api_key,
+            "api_model": self.config.douyin_parser.api_model,
+        }
+
+    def set_douyin_parser_config(
+        self,
+        asr_mode: Optional[str] = None,
+        api_endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
+        api_model: Optional[str] = None,
+    ):
+        updates = {}
+        if asr_mode is not None:
+            updates["asr_mode"] = asr_mode
+        if api_endpoint is not None:
+            updates["api_endpoint"] = api_endpoint
+        if api_key is not None:
+            updates["api_key"] = api_key
+        if api_model is not None:
+            updates["api_model"] = api_model
+        if updates:
+            self.update({"douyin_parser": updates})
+

@@ -88,12 +88,21 @@ class TemplateConfig(BaseModel):
     )
 
 
+class DouyinParserConfig(BaseModel):
+    """Douyin parser ASR configuration"""
+    asr_mode: str = Field(default="local", description="ASR mode: 'local' or 'api'")
+    api_endpoint: str = Field(default="", description="ASR API endpoint URL")
+    api_key: str = Field(default="", description="ASR API key")
+    api_model: str = Field(default="qwen3-asr-flash", description="ASR API model name")
+
+
 class PixelleVideoConfig(BaseModel):
     """Pixelle-Video main configuration"""
     project_name: str = Field(default="Pixelle-Video", description="Project name")
     llm: LLMConfig = Field(default_factory=LLMConfig)
     comfyui: ComfyUIConfig = Field(default_factory=ComfyUIConfig)
     template: TemplateConfig = Field(default_factory=TemplateConfig)
+    douyin_parser: DouyinParserConfig = Field(default_factory=DouyinParserConfig)
     
     def is_llm_configured(self) -> bool:
         """Check if LLM is properly configured"""
