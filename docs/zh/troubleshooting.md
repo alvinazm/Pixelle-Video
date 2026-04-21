@@ -18,6 +18,58 @@ uv sync
 
 ---
 
+### 提取文案报错：No module named 'faster_whisper'
+
+**症状**: 点击"提取文案"后提示 `No module named 'faster_whisper'`
+
+**原因**: 项目缺少 `faster-whisper` 依赖。本地模式（local mode）依赖 `faster-whisper` 进行语音转文字，该库之前未被加入 `pyproject.toml` 的 dependencies。
+
+**解决方案**:
+
+```bash
+# 方案一：直接安装（推荐，最快）
+uv pip install "faster-whisper>=1.0.0"
+
+# 方案二：重新同步所有依赖
+uv sync
+```
+
+安装后重启应用即可。
+
+> 如果通过 `uv sync` 安装时报错 `onnxruntime 无 macOS x86_64 wheel`，需要在 `pyproject.toml` 中添加平台约束：
+> ```toml
+> [tool.uv]
+> override-dependencies = ["onnxruntime>=1.23.0,<1.24.0"]
+> ```
+> 原因：`onnxruntime>=1.24.0` 在 macOS Intel 架构上缺少预编译 wheel，`uv` 锁定版本时会解析到最新不兼容版本。
+
+---
+
+### 依赖安装报错：onnxruntime 无 macOS x86_64 wheel
+
+**症状**: `uv sync` 或 `uv run` 时报错 `Distribution onnxruntime==1.24.x can't be installed because it doesn't have a source distribution or wheel for the current platform (macosx_26_0_x86_64)`
+
+**原因**: `faster-whisper` 的依赖 `onnxruntime`，版本 `>=1.24.0` 仅发布了 Linux/Windows/macOS ARM 的 wheel，macOS Intel (x86_64) 无预编译包。`uv` 在解析依赖时可能锁定到最新不兼容版本。
+
+**解决方案**:
+
+在 `pyproject.toml` 末尾添加：
+
+```toml
+[tool.uv]
+override-dependencies = ["onnxruntime>=1.23.0,<1.24.0"]
+```
+
+然后执行：
+
+```bash
+uv sync
+```
+
+这将约束 `onnxruntime` 到最后一个支持 macOS Intel 的版本（`1.23.x`），`faster-whisper` 在该版本下完全正常工作。
+
+---
+
 ## 配置问题
 
 ### ComfyUI 连接失败
@@ -105,4 +157,5 @@ uv sync
 日志文件位于项目根目录：
 - `api_server.log` - API 服务日志
 - `test_output.log` - 测试日志
+- `web.log` - Web UI 日志（Streamlit 应用日志）
 
