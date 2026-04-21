@@ -157,6 +157,8 @@ def _validate_url(url: str) -> Optional[str]:
         return "kuaishou"
     if "/video/" in url or "/note/" in url or "v.douyin.com" in url:
         return "douyin"
+    if "xiaohongshu.com" in url:
+        return "xiaohongshu"
     return None
 
 
@@ -166,8 +168,12 @@ def _get_video_info(url: str, platform: str = "douyin") -> dict:
 
     if platform == "douyin":
         return _get_douyin_info(url, t_all)
-    else:
+    elif platform == "kuaishou":
         return _get_kuaishou_info(url, t_all)
+    elif platform == "xiaohongshu":
+        return _get_xiaohongshu_info(url, t_all)
+    else:
+        raise RuntimeError(f"不支持的平台: {platform}")
 
 
 def _get_douyin_info(url: str, t_all: float) -> dict:
@@ -298,6 +304,59 @@ def _get_kuaishou_info(url: str, t_all: float) -> dict:
         "url": video_url,
         "webpage_url": url,
     }
+
+
+def _get_xiaohongshu_info(url: str, t_all: float, use_browser: bool = False) -> dict:
+    cfg = config_manager.get_douyin_parser_config()
+    xhs_api_url = cfg.get("xhs_api_url", "http://127.0.0.1:5556/xhs/detail")
+
+    logger.info(f"[小红书解析] 调用本地 API... (URL: {url[:60]})")
+    logger.info(f"[小红书解析] API 地址: {xhs_api_url}")
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(xhs_api_url, json={"url": url})
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info(f"[小红书解析] API 响应: {json.dumps(data)[:300]}")
+
+            if not data.get("data"):
+                raise RuntimeError(f"小红书 API 返回空数据: {data.get('msg', '未知错误')}")
+
+            d = data["data"]
+            note_type = d.get("作品类型", "未知")
+            video_url = d.get("下载地址", "") or ""
+            title = d.get("作品标题", "") or d.get("作品描述", "") or f"xiaohongshu_{int(t_all)}"
+            desc = d.get("作品描述", "") or ""
+
+            is_video = note_type == "视频"
+
+            total = time.time() - t_all
+            logger.info(
+                f"[小红书解析] === 解析完成 === "
+                f"类型={note_type}, 标题={title[:30]}, "
+                f"耗时={total:.1f}s"
+            )
+
+            return {
+                "title": re.sub(r"[\\\\/:*?\"<>|]", "_", title),
+                "url": video_url,
+                "webpage_url": url,
+                "note_type": note_type,
+                "is_video": is_video,
+                "desc": desc,
+                "note_author": d.get("作者昵称", ""),
+                "note_likes": d.get("点赞数量", 0),
+                "note_collects": d.get("收藏数量", 0),
+                "note_comments": d.get("评论数量", 0),
+            }
+
+    except httpx.HTTPError as e:
+        logger.error(f"[小红书解析] API 请求失败: {e}")
+        raise RuntimeError(f"小红书 API 请求失败，请确保 xhs-dl 服务已启动: {e}")
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"[小红书解析] 响应解析失败: {e}")
+        raise RuntimeError(f"小红书 API 响应格式错误: {e}")
 
 
 def _get_whisper_model():
@@ -568,14 +627,24 @@ class DouyinParserPipelineUI(PipelineUI):
                             api_endpoint=st.session_state.get("douyin_api_endpoint", ""),
                             api_key=st.session_state.get("douyin_api_key", ""),
                             api_model=st.session_state.get("douyin_api_model", default_model),
+                            xhs_api_url=st.session_state.get("douyin_xhs_api_url", ""),
                         )
                         config_manager.save()
                         st.success("✅ 配置已保存")
                         st.rerun()
 
+            c6, c7 = st.columns([2, 1])
+            with c6:
+                st.text_input(
+                    tr("douyin_parser.xhs_api_url"),
+                    value=cfg.get("xhs_api_url", "http://127.0.0.1:5556/xhs/detail"),
+                    placeholder=tr("douyin_parser.xhs_api_url_placeholder"),
+                    key="douyin_xhs_api_url",
+                )
+
         url_input = st.text_area(
             tr("douyin_parser.url_label"),
-                        placeholder="抖音: https://v.douyin.com/xxxxx  快手: https://v.kuaishou.com/xxxxx",
+                        placeholder="抖音: https://v.douyin.com/xxxxx  快手: https://v.kuaishou.com/xxxxx  小红书: https://www.xiaohongshu.com/discovery/item/xxxxx",
             label_visibility="collapsed",
             key="douyin_url_input",
         )
@@ -662,6 +731,27 @@ class DouyinParserPipelineUI(PipelineUI):
                     video_url = info.get("url") or info.get("webpage_url", "")
                     st.session_state["douyin_video_url"] = video_url
                     st.session_state["douyin_title"] = info.get("title", "")
+
+                    # 小红书特殊处理：图文笔记直接使用 desc 作为文案
+                    if url_type == "xiaohongshu":
+                        xiaohongshu_desc = info.get("desc", "")
+                        is_video = info.get("is_video", False)
+                        
+                        if xiaohongshu_desc:
+                            # 有描述直接使用描述
+                            if is_video:
+                                logger.info(f"[小红书] 视频笔记，使用描述作为文案，长度: {len(xiaohongshu_desc)} 字")
+                            else:
+                                logger.info(f"[小红书] 图文笔记，使用描述作为文案，长度: {len(xiaohongshu_desc)} 字")
+                            st.session_state["douyin_text"] = xiaohongshu_desc
+                            progress_bar.progress(1.0, text="✅ 提取完成！（小红书）")
+                            st.rerun()
+                        elif is_video:
+                            # 有视频但没有描述，需要转语音
+                            logger.info(f"[小红书] 视频笔记无描述，提取语音转文字")
+                        else:
+                            # 无视频也无描述
+                            logger.warning(f"[小红书] 无法提取文案")
 
                     if asr_mode == "local":
                         progress_bar.progress(0.2, text="🔊 正在处理音频（本地推理）...")

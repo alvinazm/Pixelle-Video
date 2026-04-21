@@ -94,6 +94,7 @@ class DouyinParserConfig(BaseModel):
     api_endpoint: str = Field(default="", description="ASR API endpoint URL")
     api_key: str = Field(default="", description="ASR API key")
     api_model: str = Field(default="paraformer-v2", description="ASR API model name")
+    xhs_api_url: str = Field(default="http://127.0.0.1:5556/xhs/detail", description="XiaoHongshu xhs-dl API URL")
 
 
 class PixelleVideoConfig(BaseModel):

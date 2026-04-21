@@ -184,6 +184,7 @@ class ConfigManager:
         api_endpoint: Optional[str] = None,
         api_key: Optional[str] = None,
         api_model: Optional[str] = None,
+        xhs_api_url: Optional[str] = None,
     ):
         updates = {}
         if asr_mode is not None:
@@ -194,6 +195,8 @@ class ConfigManager:
             updates["api_key"] = api_key
         if api_model is not None:
             updates["api_model"] = api_model
+        if xhs_api_url is not None:
+            updates["xhs_api_url"] = xhs_api_url
         if updates:
             self.update({"douyin_parser": updates})
 

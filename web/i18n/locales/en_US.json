@@ -590,6 +590,8 @@
     "douyin_parser.api_key": "API Key",
     "douyin_parser.api_model": "Model Name",
     "douyin_parser.api_config_required": "Please configure API endpoint and key first",
+    "douyin_parser.xhs_api_url": "XiaoHongshu API URL",
+    "douyin_parser.xhs_api_url_placeholder": "Default: http://127.0.0.1:5556/xhs/detail",
     "nav.choose_pipeline": "Choose a Pipeline",
     "nav.go_to": "Go to Pipeline"
   }

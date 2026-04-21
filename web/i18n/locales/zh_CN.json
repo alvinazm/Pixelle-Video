@@ -590,6 +590,8 @@
     "douyin_parser.api_key": "API 密钥",
     "douyin_parser.api_model": "模型名称",
     "douyin_parser.api_config_required": "请先配置 API 密钥和模型名称",
+    "douyin_parser.xhs_api_url": "小红书 API 地址",
+    "douyin_parser.xhs_api_url_placeholder": "默认: http://127.0.0.1:5556/xhs/detail",
     "nav.choose_pipeline": "选择流水线",
     "nav.go_to": "进入流水线"
   }
