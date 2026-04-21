@@ -124,7 +124,8 @@ def _rewrite_with_ai(text: str) -> str:
     logger.info(f"[AI改写] API响应完成, 耗时: {t4-t3:.3f}s | status=ok")
 
     result = resp.choices[0].message.content.strip()
-    logger.info(f"[AI改写] 解析结果完成, 返回长度: {len(result)} 字")
+    result = re.sub(r"<think>[\s\S]*?</think>", "", result).strip()
+    logger.info(f"[AI改写] 解析结果完成, 返回长度: {len(result)} 字 (已过滤think标签)")
     logger.info(f"[AI改写] 总耗时: {time_mod.time()-t0:.3f}s")
     return result
 
