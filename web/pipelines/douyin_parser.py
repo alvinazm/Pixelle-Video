@@ -45,24 +45,37 @@ _DESKTOP_HEADERS = {
 }
 
 
-def _copy_button(text: str, label: str = "📋 复制文本") -> None:
-    safe_text = text.replace("`", "\\`").replace("${", "\\${")
+def _copy_button(text: str, btn_copy_label: str = "📋 复制文本", btn_md_label: str = "📥 下载MD",
+                 md_b64: str = "", md_name: str = "douyin_text.md") -> None:
+    safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    dl_attr = f'href="data:text/markdown;base64,{md_b64}" download="{md_name}"' if md_b64 else 'style="display:none"'
     components.html(
         f"""
-        <button id="cp_btn" style="width:100%;padding:8px;border-radius:5px;border:none;
-            background:#4CAF50;color:white;cursor:pointer;font-size:14px">{label}</button>
+        <div style="display:flex;gap:8px">
+            <button id="cp_btn" style="flex:1;padding:8px 0;border-radius:5px;border:none;
+                background:#4CAF50;color:white;cursor:pointer;font-size:14px;
+                font-weight:500">{btn_copy_label}</button>
+            <a id="dl_btn" {dl_attr} style="flex:1;padding:8px 0;border-radius:5px;border:1px solid #4CAF50;
+                color:#4CAF50;cursor:pointer;font-size:14px;font-weight:500;
+                text-align:center;text-decoration:none;box-sizing:border-box;
+                display:inline-block;background:white">{btn_md_label}</a>
+        </div>
         <textarea id="cp_src" style="display:none">{safe_text}</textarea>
         <script>
         document.getElementById('cp_btn').onclick = function() {{
             var t = document.getElementById('cp_src').value;
             navigator.clipboard.writeText(t).then(function() {{
                 document.getElementById('cp_btn').textContent = '✅ 已复制';
-                setTimeout(function(){{document.getElementById('cp_btn').textContent = '{label}';}}, 2000);
+                document.getElementById('cp_btn').style.background = '#45a049';
+                setTimeout(function(){{
+                    document.getElementById('cp_btn').textContent = '{btn_copy_label}';
+                    document.getElementById('cp_btn').style.background = '#4CAF50';
+                }}, 2000);
             }});
         }};
         </script>
         """,
-        height=42,
+        height=48,
     )
 
 
@@ -619,14 +632,15 @@ class DouyinParserPipelineUI(PipelineUI):
                         label_visibility="collapsed",
                         key="douyin_text_display",
                     )
-                    c1, c2 = st.columns(2)
-                    _copy_button(text, label=tr("douyin_parser.btn_copy"))
-                    c2.download_button(
-                        tr("douyin_parser.btn_copy_markdown"),
-                        f"# {st.session_state.get('douyin_title', '抖音文案')}\n\n{text}",
-                        file_name="douyin_text.md",
-                        mime="text/markdown",
-                        use_container_width=True,
+                    md_content = f"# {st.session_state.get('douyin_title', '抖音文案')}\n\n{text}"
+                    md_b64 = __import__("base64").b64encode(md_content.encode()).decode()
+                    md_name = f"{st.session_state.get('douyin_title', 'douyin_text')}.md"
+                    _copy_button(
+                        text,
+                        md_b64=md_b64,
+                        md_name=md_name,
+                        btn_copy_label=tr("douyin_parser.btn_copy"),
+                        btn_md_label=tr("douyin_parser.btn_copy_markdown"),
                     )
 
         with st.expander(tr("douyin_parser.how_to_use"), expanded=False):
