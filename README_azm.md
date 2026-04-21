@@ -52,6 +52,8 @@ ComfyKit 是 ComfyUI 生态的通用客户端，RunningHub 底层也跑的是 Co
 所以"分镜类型"决定的是生成什么媒体，"模板"决定的是这些媒体在画面里怎么摆放。
 
 
+requirements-docs.txt 用 pyproject.toml 替代了。
+
 # 快速创作-分镜类型-生成插图
 - 提示词在：/Users/azm/MyProject/Pixelle-Video/config.yaml 
 - 工作流ID：workflows/runninghub/image_Z-image.json #旧的ID=1995319131513794562
@@ -82,3 +84,4 @@ TTS 服务的 WORKFLOW_PREFIX = "tts_"，所以只有 tts_*.json 才会被识别
 - 页面UI优化
 - 右上角设置功能
 - 返回首页
+- 安装faster-whisper，出现onnxruntime冲突

@@ -12,4 +12,3 @@ if lsof -i :$PORT > /dev/null 2>&1; then
 fi
 
 uv run streamlit run web/app.py --server.headless true > web.log 2>&1 &
-
