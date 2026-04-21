@@ -479,13 +479,13 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.session_state["douyin_title"] = info.get("title", "")
 
                     if asr_mode == "local":
-                        progress_bar.progress(0.2, text="⬇️ 下载视频中...")
+                        progress_bar.progress(0.2, text="🔊 正在处理音频（本地推理）...")
                         text = _extract_text_asr(video_url)
                     elif asr_mode == "transcription":
-                        progress_bar.progress(0.2, text="🔊 正在转写...")
+                        progress_bar.progress(0.2, text="🔊 正在处理音频（Transcription）...")
                         text = _transcribe_transcription(video_url, api_key, api_model)
                     else:
-                        progress_bar.progress(0.2, text="🔊 正在转写...")
+                        progress_bar.progress(0.2, text="🔊 正在处理音频（Chat API）...")
                         text = _transcribe_chat(video_url, endpoint, api_key, api_model)
 
                     st.session_state["douyin_text"] = text
