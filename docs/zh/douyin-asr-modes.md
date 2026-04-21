@@ -54,6 +54,8 @@ text = zhconv.convert(text, "zh-hans")  # 繁体转简体
 
 调用 DashScope 原生 ASR API，传入视频 URL，服务器端自动下载并转写。异步任务模式，支持轮询等待结果。
 
+只需要输入apikey+model，无需baseurl，skd封装好了。
+
 ### 核心代码
 
 ```python
@@ -114,6 +116,10 @@ text = raw["transcripts"][0]["text"]
 ### 实现原理
 
 将音频转为 base64，通过 Chat Completions API 的 `input_audio` 消息格式发送给 LLM，由 LLM 做语音识别。需本地下载 + ffmpeg 转码 + base64 编码。
+
+apikey
+url=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+model=qwen3-asr-flash
 
 ### 核心代码
 

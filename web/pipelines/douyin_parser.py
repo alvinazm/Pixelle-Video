@@ -79,6 +79,39 @@ def _copy_button(text: str, btn_copy_label: str = "📋 复制文本", btn_md_la
     )
 
 
+def _rewrite_with_ai(text: str) -> str:
+    from pixelle_video.config import config_manager
+    llm_cfg = config_manager.get_llm_config()
+    api_key = llm_cfg.get("api_key", "")
+    base_url = llm_cfg.get("base_url", "")
+    model = llm_cfg.get("model", "")
+
+    if not api_key or not base_url or not model:
+        raise RuntimeError(tr("douyin_parser.llm_not_configured"))
+
+    prompt = f"""请将以下视频文案进行优化改写，让它更适合短视频口播表达。
+要求：
+1. 语言自然流畅，符合口语化表达
+2. 保留原文案的核心内容和情感
+3. 可适当调整句子长度，更适合配音朗读
+4. 如有方言或口语，可改为更标准的普通话表达
+
+原文案：
+{text}
+
+请直接输出改写后的文案，不需要任何解释："""
+
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=4000,
+    )
+    return resp.choices[0].message.content.strip()
+
+
 def _extract_url(text: str) -> Optional[str]:
     text = text.strip()
     urls = re.findall(r'https?://\S+', text)
@@ -546,6 +579,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.session_state["douyin_video_url"] = info.get("url") or info.get("webpage_url", "")
                     st.session_state["douyin_title"] = info.get("title", "")
                     st.session_state["douyin_text"] = ""
+                    st.session_state["douyin_rewritten_text"] = ""
                     progress_area.success("✅ 解析完成")
                     st.rerun()
                 except Exception as e:
@@ -595,6 +629,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     config_manager.save()
 
                 st.session_state["douyin_text"] = ""
+                st.session_state["douyin_rewritten_text"] = ""
                 progress_bar = st.progress(0, text="⏳ 准备中...")
                 try:
                     progress_bar.progress(0.1, text="📡 获取视频信息...")
@@ -632,16 +667,43 @@ class DouyinParserPipelineUI(PipelineUI):
                         label_visibility="collapsed",
                         key="douyin_text_display",
                     )
-                    md_content = f"# {st.session_state.get('douyin_title', '抖音文案')}\n\n{text}"
-                    md_b64 = __import__("base64").b64encode(md_content.encode()).decode()
-                    md_name = f"{st.session_state.get('douyin_title', 'douyin_text')}.md"
-                    _copy_button(
-                        text,
-                        md_b64=md_b64,
-                        md_name=md_name,
-                        btn_copy_label=tr("douyin_parser.btn_copy"),
-                        btn_md_label=tr("douyin_parser.btn_copy_markdown"),
-                    )
+                    rewritten = st.session_state.get("douyin_rewritten_text", "")
+                    rewrite_placeholder = tr("douyin_parser.rewrite_placeholder")
+                    if st.button(
+                        f"{tr('douyin_parser.btn_ai_rewrite')}",
+                        use_container_width=True,
+                    ):
+                        rewrite_ph = st.empty()
+                        rewrite_ph.info(tr("douyin_parser.rewriting"))
+                        try:
+                            rewritten = _rewrite_with_ai(text)
+                            st.session_state["douyin_rewritten_text"] = rewritten
+                            rewrite_ph.success(tr("douyin_parser.rewrite_success"))
+                        except Exception as e:
+                            rewrite_ph.error(tr("douyin_parser.rewrite_failed"))
+                            st.error(f"{tr('douyin_parser.error')}: {e}")
+
+                    if rewritten:
+                        with st.container(border=True):
+                            st.markdown(f"**{tr('douyin_parser.rewritten_text')}**")
+                            rewrite_key = "douyin_rewrite_display"
+                            st.text_area(
+                                tr("douyin_parser.rewritten_text"),
+                                value=rewritten,
+                                height=200,
+                                label_visibility="collapsed",
+                                key=rewrite_key,
+                            )
+                            safe_md = f"# {st.session_state.get('douyin_title', '抖音文案')}\n\n{rewritten}"
+                            md_b64 = __import__("base64").b64encode(safe_md.encode()).decode()
+                            md_name = f"{st.session_state.get('douyin_title', 'douyin_text')}_改写.md"
+                            _copy_button(
+                                rewritten,
+                                md_b64=md_b64,
+                                md_name=md_name,
+                                btn_copy_label=tr("douyin_parser.btn_copy"),
+                                btn_md_label=tr("douyin_parser.btn_copy_markdown"),
+                            )
 
         with st.expander(tr("douyin_parser.how_to_use"), expanded=False):
             st.markdown(tr("douyin_parser.usage_steps"))
