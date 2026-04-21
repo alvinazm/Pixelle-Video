@@ -318,7 +318,7 @@ def _get_xiaohongshu_info(url: str, t_all: float, use_browser: bool = False) -> 
             resp = client.post(xhs_api_url, json={"url": url})
             resp.raise_for_status()
             data = resp.json()
-            logger.info(f"[小红书解析] API 响应: {json.dumps(data)[:300]}")
+            logger.info(f"[小红书解析] API 响应: {json.dumps(data, ensure_ascii=False)[:1000]}")
 
             if not data.get("data"):
                 raise RuntimeError(f"小红书 API 返回空数据: {data.get('msg', '未知错误')}")
@@ -328,6 +328,7 @@ def _get_xiaohongshu_info(url: str, t_all: float, use_browser: bool = False) -> 
             video_url = d.get("下载地址", "") or ""
             title = d.get("作品标题", "") or d.get("作品描述", "") or f"xiaohongshu_{int(t_all)}"
             desc = d.get("作品描述", "") or ""
+            logger.info(f"[小红书解析] 解析结果: 类型={note_type}, 视频URL={video_url[:80] if video_url else '空'}, desc长度={len(desc)}")
 
             is_video = note_type == "视频"
 
@@ -732,26 +733,20 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.session_state["douyin_video_url"] = video_url
                     st.session_state["douyin_title"] = info.get("title", "")
 
-                    # 小红书特殊处理：图文笔记直接使用 desc 作为文案
                     if url_type == "xiaohongshu":
-                        xiaohongshu_desc = info.get("desc", "")
                         is_video = info.get("is_video", False)
                         
-                        if xiaohongshu_desc:
-                            # 有描述直接使用描述
-                            if is_video:
-                                logger.info(f"[小红书] 视频笔记，使用描述作为文案，长度: {len(xiaohongshu_desc)} 字")
-                            else:
+                        if not is_video:
+                            xiaohongshu_desc = info.get("desc", "")
+                            if xiaohongshu_desc:
                                 logger.info(f"[小红书] 图文笔记，使用描述作为文案，长度: {len(xiaohongshu_desc)} 字")
-                            st.session_state["douyin_text"] = xiaohongshu_desc
-                            progress_bar.progress(1.0, text="✅ 提取完成！（小红书）")
-                            st.rerun()
-                        elif is_video:
-                            # 有视频但没有描述，需要转语音
-                            logger.info(f"[小红书] 视频笔记无描述，提取语音转文字")
+                                st.session_state["douyin_text"] = xiaohongshu_desc
+                                progress_bar.progress(1.0, text="✅ 提取完成！（小红书图文）")
+                                st.rerun()
+                            else:
+                                logger.warning(f"[小红书] 图文笔记无描述，无法提取文案")
                         else:
-                            # 无视频也无描述
-                            logger.warning(f"[小红书] 无法提取文案")
+                            logger.info(f"[小红书] 视频笔记，提取语音转文字")
 
                     if asr_mode == "local":
                         progress_bar.progress(0.2, text="🔊 正在处理音频（本地推理）...")
