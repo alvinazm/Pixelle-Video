@@ -176,6 +176,7 @@ class ConfigManager:
             "api_endpoint": self.config.douyin_parser.api_endpoint,
             "api_key": self.config.douyin_parser.api_key,
             "api_model": self.config.douyin_parser.api_model,
+            "xhs_api_url": self.config.douyin_parser.xhs_api_url,
         }
 
     def set_douyin_parser_config(

@@ -602,7 +602,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.text_input("模型", value="base", disabled=True)
 
             if asr_mode_display != mode_local:
-                c3, c4, c5 = st.columns([2, 2, 1])
+                c3, c4 = st.columns([2, 2])
                 with c3:
                     endpoint_placeholder = "选填（Transcription 专用）" if asr_mode_display == mode_transcription else "必填，如 https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
                     api_endpoint = st.text_input(
@@ -619,20 +619,6 @@ class DouyinParserPipelineUI(PipelineUI):
                         placeholder=default_model,
                         key="douyin_api_model",
                     )
-                with c5:
-                    st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
-                    if st.button("💾 保存", key="douyin_save_config", use_container_width=True):
-                        asr_mode_value = "transcription" if asr_mode_display == mode_transcription else "chat"
-                        config_manager.set_douyin_parser_config(
-                            asr_mode=asr_mode_value,
-                            api_endpoint=st.session_state.get("douyin_api_endpoint", ""),
-                            api_key=st.session_state.get("douyin_api_key", ""),
-                            api_model=st.session_state.get("douyin_api_model", default_model),
-                            xhs_api_url=st.session_state.get("douyin_xhs_api_url", ""),
-                        )
-                        config_manager.save()
-                        st.success("✅ 配置已保存")
-                        st.rerun()
 
             c6, c7 = st.columns([2, 1])
             with c6:
@@ -642,6 +628,20 @@ class DouyinParserPipelineUI(PipelineUI):
                     placeholder=tr("douyin_parser.xhs_api_url_placeholder"),
                     key="douyin_xhs_api_url",
                 )
+            with c7:
+                st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                if st.button("💾 保存", key="douyin_save_config", use_container_width=True):
+                    asr_mode_value = "transcription" if asr_mode_display == mode_transcription else "chat"
+                    config_manager.set_douyin_parser_config(
+                        asr_mode=asr_mode_value,
+                        api_endpoint=st.session_state.get("douyin_api_endpoint", ""),
+                        api_key=st.session_state.get("douyin_api_key", ""),
+                        api_model=st.session_state.get("douyin_api_model", default_model if asr_mode_display != mode_local else "paraformer-v2"),
+                        xhs_api_url=st.session_state.get("douyin_xhs_api_url", ""),
+                    )
+                    config_manager.save()
+                    st.success("✅ 配置已保存")
+                    st.rerun()
 
         url_input = st.text_area(
             tr("douyin_parser.url_label"),
