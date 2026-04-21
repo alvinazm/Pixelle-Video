@@ -389,7 +389,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     default_model = "paraformer-v2" if asr_mode_display == mode_transcription else "qwen3-asr-flash"
                     st.text_input(
                         tr("douyin_parser.api_model"),
-                        value=cfg.get("api_model", default_model),
+                        value=default_model,
                         placeholder=default_model,
                         key="douyin_api_model",
                     )
