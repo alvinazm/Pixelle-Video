@@ -725,6 +725,9 @@ class DouyinParserPipelineUI(PipelineUI):
 
                 st.session_state["douyin_text"] = ""
                 st.session_state["douyin_rewritten_text"] = ""
+                for key in list(st.session_state.keys()):
+                    if key.startswith("douyin_text_display") or key.startswith("douyin_rewrite_display"):
+                        del st.session_state[key]
                 progress_bar = st.progress(0, text="⏳ 准备中...")
                 try:
                     progress_bar.progress(0.1, text="📡 获取视频信息...")
