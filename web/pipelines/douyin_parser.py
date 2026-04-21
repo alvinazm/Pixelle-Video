@@ -160,15 +160,15 @@ def _transcribe_api(video_url: str, api_key: str, model: str) -> str:
     logger.info("[抖音解析] [2/2] 等待转写完成...")
     for attempt in range(60):
         result = dashscope.audio.asr.Transcription.wait(task=task_id)
-        if result.output.task_status == "SUCCEEDED":
+        if result.output["task_status"] == "SUCCEEDED":
             break
-        if result.output.task_status == "FAILED":
-            raise RuntimeError(f"转写失败: {result.output.message}")
+        if result.output["task_status"] == "FAILED":
+            raise RuntimeError(f"转写失败: {result.output['message']}")
         time.sleep(2)
     else:
         raise RuntimeError("转写超时")
 
-    result_url = result.output.results[0].transcription_url
+    result_url = result.output.results[0]["transcription_url"]
     raw = json.loads(request.urlopen(result_url).read().decode())
     text = raw.get("transcripts", [{}])[0].get("text", "").strip()
     if not text:
