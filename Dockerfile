@@ -52,7 +52,7 @@ RUN export UV_HTTP_TIMEOUT=300 && \
     else \
         uv pip install -e .; \
     fi && \
-    playwright install --with-deps chromium
+    .venv/bin/playwright install --with-deps chromium
 
 # Copy rest of application code
 COPY api ./api
@@ -68,9 +68,9 @@ COPY docs/FAQ*.md ./docs/
 RUN mkdir -p /app/output /app/data /app/temp
 
 # Expose ports
-# 8000: API service
+# 8500: API service
 # 8501: Web UI service
-EXPOSE 8000 8501
+EXPOSE 8500 8501
 
 # Default command (can be overridden in docker-compose)
 CMD ["uv", "run", "python", "api/app.py"]
