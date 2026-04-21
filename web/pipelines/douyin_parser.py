@@ -36,7 +36,7 @@ _whisper_model = None
 _whisper_lock = threading.Lock()
 
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
 
@@ -128,25 +128,19 @@ def _get_douyin_info(url: str, t_all: float) -> dict:
 
 
 def _get_kuaishou_info(url: str, t_all: float) -> dict:
-    if "v.kuaishou.com" in url or "kuaishou.com/f/" in url:
-        with httpx.Client(follow_redirects=True, timeout=10.0) as client:
-            resp = client.head(url, follow_redirects=True)
-            resolved = str(resp.url)
-            logger.info(f"[视频解析] 快手短链接解析: {url} -> {resolved}")
-            url = resolved
-
+    t_fetch = time.time()
+    logger.info(f"[视频解析] 获取快手页面 HTML... (URL: {url[:60]})")
+    with httpx.Client(follow_redirects=True, timeout=15.0, headers={**_HEADERS, "Referer": "https://www.kuaishou.com/"}) as client:
+        resp = client.get(url)
+        resp.raise_for_status()
+    url = str(resp.url)
     if "/short-video/" not in url:
         raise RuntimeError("Unsupported Kuaishou URL format")
     video_id = url.split("/short-video/")[-1].split("?")[0].split("/")[0]
-
-    t_fetch = time.time()
-    logger.info(f"[视频解析] 获取快手页面 HTML... (URL: {url[:60]})")
-    with httpx.Client(timeout=15.0, headers={**_HEADERS, "Referer": "https://www.kuaishou.com/"}) as client:
-        resp = client.get(url)
-        resp.raise_for_status()
     logger.info(f"[视频解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
 
-    pattern = re.compile(r"window\.__APOLLO_STATE__\s*=\s*(\{.*?\});\s*\(function\(\)", re.DOTALL)
+    pattern = re.compile(r"window\.__APOLLO_STATE__\s*=\s*(\{[\s\S]*?\})\s*;\s*\(function\(")
+    match = pattern.search(resp.text)
     match = pattern.search(resp.text)
     if not match:
         raise RuntimeError("Failed to extract __APOLLO_STATE__ from page HTML")
