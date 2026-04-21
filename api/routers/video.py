@@ -47,10 +47,10 @@ def path_to_url(request: Request, file_path: str) -> str:
     
     Examples:
         Windows: G:\\...\\output\\20251205_233630_c939\\final.mp4
-              -> http://localhost:8000/api/files/20251205_233630_c939/final.mp4
+              -> http://localhost:8500/api/files/20251205_233630_c939/final.mp4
         
         Linux:   /home/user/.../output/20251205_233630_c939/final.mp4
-              -> http://localhost:8000/api/files/20251205_233630_c939/final.mp4
+              -> http://localhost:8500/api/files/20251205_233630_c939/final.mp4
         
         Domain:  With domain request -> https://your-domain.com/api/files/...
     """
