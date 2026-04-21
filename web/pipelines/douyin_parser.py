@@ -379,10 +379,11 @@ class DouyinParserPipelineUI(PipelineUI):
             if asr_mode_display != mode_local:
                 c3, c4, c5 = st.columns([2, 2, 1])
                 with c3:
+                    endpoint_placeholder = "选填（Transcription 专用）" if asr_mode_display == mode_transcription else "必填，如 https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
                     api_endpoint = st.text_input(
                         tr("douyin_parser.api_endpoint"),
                         value=cfg.get("api_endpoint", ""),
-                        placeholder="API 地址（可选）",
+                        placeholder=endpoint_placeholder,
                         key="douyin_api_endpoint",
                     )
                 with c4:
