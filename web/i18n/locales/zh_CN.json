@@ -576,12 +576,13 @@
     "douyin_parser.asr_config": "⚙️ ASR 模式",
     "douyin_parser.asr_mode": "模式",
     "douyin_parser.mode_local": "本地模式（免费，较慢）",
-    "douyin_parser.mode_api": "API 模式（快速，需配置密钥）",
+    "douyin_parser.mode_transcription": "API-Transcription（paraformer-v2）",
+    "douyin_parser.mode_chat": "API-Chat（qwen3-asr-flash）",
     "douyin_parser.local_model": "模型",
     "douyin_parser.api_endpoint": "API 接口地址",
     "douyin_parser.api_key": "API 密钥",
     "douyin_parser.api_model": "模型名称",
-    "douyin_parser.api_config_required": "请先配置 API 接口地址和密钥",
+    "douyin_parser.api_config_required": "请先配置 API 密钥和模型名称",
     "nav.choose_pipeline": "选择流水线",
     "nav.go_to": "进入流水线"
   }

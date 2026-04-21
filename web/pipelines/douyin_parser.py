@@ -142,7 +142,7 @@ def _prewarm_model():
     thread.start()
 
 
-def _transcribe_api(video_url: str, api_key: str, model: str) -> str:
+def _transcribe_transcription(video_url: str, api_key: str, model: str) -> str:
     t_all = time.time()
     logger.info(f"[抖音解析] === API 模式 === ({model})")
     dashscope.api_key = api_key
@@ -177,6 +177,94 @@ def _transcribe_api(video_url: str, api_key: str, model: str) -> str:
     logger.info(f"[抖音解析] [2/2] 转写完成, {len(text)}字, {time.time()-t_api:.1f}s")
     total = time.time() - t_all
     logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
+    return text
+
+
+def _transcribe_chat(video_url: str, api_endpoint: str, api_key: str, model: str) -> str:
+    t_all = time.time()
+    logger.info(f"[抖音解析] === Chat 模式 === ({model})")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="douyin_chat_"))
+    mp3_path = tmp_dir / "audio.mp3"
+
+    import base64
+
+    t_audio = time.time()
+    logger.info("[抖音解析] [1/3] 流式下载+转码...")
+    ref_headers = {**{"Referer": "https://www.douyin.com/"}, **_HEADERS}
+    proc = subprocess.Popen(
+        ["ffmpeg", "-y", "-headers", "".join(f"{k}: {v}\r\n" for k, v in ref_headers.items()),
+         "-i", video_url, "-vn",
+         "-acodec", "libmp3lame", "-b:a", "32k",
+         "-ar", "16000", "-ac", "1", str(mp3_path)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    proc.wait(timeout=120)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.read().decode(errors='replace')[-300:]}")
+    logger.info(f"[抖音解析] [1/3] 音频完成, {mp3_path.stat().st_size/1024:.0f}KB, {time.time()-t_audio:.1f}s")
+
+    audio_b64 = base64.b64encode(mp3_path.read_bytes()).decode()
+    logger.info(f"[抖音解析] Base64: {len(audio_b64)/1024:.0f}KB")
+
+    t_api = time.time()
+    logger.info(f"[抖音解析] [2/3] API 转写...")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    audio_duration_sec = float(
+        subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(mp3_path)],
+            capture_output=True, text=True,
+        ).stdout.strip() or 0
+    )
+
+    if audio_duration_sec > 270:
+        logger.info(f"[抖音解析] 音频超过 270s，分段处理...")
+        chunk_duration = 240
+        all_text = []
+        for i in range(0, int(audio_duration_sec) + 1, chunk_duration):
+            chunk_path = tmp_dir / f"chunk_{i}.mp3"
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(mp3_path), "-ss", str(i),
+                 "-t", str(chunk_duration), "-acodec", "copy", str(chunk_path)],
+                capture_output=True, timeout=60,
+            )
+            chunk_b64 = base64.b64encode(chunk_path.read_bytes()).decode()
+            payload = {
+                "model": model,
+                "messages": [{"role": "user", "content": [{
+                    "type": "input_audio",
+                    "input_audio": f"data:audio/mpeg;base64,{chunk_b64}"
+                }]}],
+                "stream": False,
+            }
+            resp = httpx.post(api_endpoint, json=payload, headers=headers, timeout=120)
+            if resp.status_code != 200:
+                raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+            chunk_text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            if chunk_text:
+                all_text.append(chunk_text)
+            logger.info(f"[抖音解析] 分段 {i//chunk_duration + 1} 完成: {len(chunk_text)}字")
+        text = "".join(all_text)
+    else:
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": [{
+                "type": "input_audio",
+                "input_audio": f"data:audio/mpeg;base64,{audio_b64}"
+            }]}],
+            "stream": False,
+        }
+        resp = httpx.post(api_endpoint, json=payload, headers=headers, timeout=120)
+        if resp.status_code != 200:
+            raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
+        text = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+    logger.info(f"[抖音解析] [3/3] 转写完成, {len(text)}字, {time.time()-t_api:.1f}s")
+    total = time.time() - t_all
+    logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
     return text
 
 
@@ -262,31 +350,23 @@ class DouyinParserPipelineUI(PipelineUI):
         if cfg["asr_mode"] == "local":
             _prewarm_model()
         mode_local = tr("douyin_parser.mode_local")
-        mode_api = tr("douyin_parser.mode_api")
-        default_mode_index = 0 if cfg["asr_mode"] == "local" else 1
+        mode_transcription = tr("douyin_parser.mode_transcription")
+        mode_chat = tr("douyin_parser.mode_chat")
+        mode_map = {mode_local: "local", mode_transcription: "transcription", mode_chat: "chat"}
+        reverse_map = {"local": 0, "transcription": 1, "chat": 2}
+        default_mode_index = reverse_map.get(cfg["asr_mode"], 0)
 
         with st.expander(tr("douyin_parser.asr_config"), expanded=False):
-            c1, c2, c3 = st.columns([2, 2, 1])
+            c1, c2 = st.columns([2, 1])
             with c1:
-                asr_mode_display = st.radio(
+                asr_mode_display = st.selectbox(
                     tr("douyin_parser.asr_mode"),
-                    [mode_local, mode_api],
+                    [mode_local, mode_transcription, mode_chat],
                     index=default_mode_index,
-                    horizontal=True,
                     key="douyin_asr_mode",
                 )
             with c2:
-                if asr_mode_display == mode_api:
-                    api_endpoint = st.text_input(
-                        tr("douyin_parser.api_endpoint"),
-                        value=cfg.get("api_endpoint", ""),
-                        placeholder="API 地址（可选）",
-                        key="douyin_api_endpoint",
-                    )
-                else:
-                    st.text_input(tr("douyin_parser.local_model"), value="base", disabled=True)
-            with c3:
-                if asr_mode_display == mode_api:
+                if asr_mode_display != mode_local:
                     api_key = st.text_input(
                         tr("douyin_parser.api_key"),
                         value=cfg.get("api_key", ""),
@@ -294,25 +374,34 @@ class DouyinParserPipelineUI(PipelineUI):
                         key="douyin_api_key",
                     )
                 else:
-                    st.text_input("CPU 线程", value="12", disabled=True)
+                    st.text_input("模型", value="base", disabled=True)
 
-            if asr_mode_display == mode_api:
-                c4, c5 = st.columns([2, 1])
+            if asr_mode_display != mode_local:
+                c3, c4, c5 = st.columns([2, 2, 1])
+                with c3:
+                    api_endpoint = st.text_input(
+                        tr("douyin_parser.api_endpoint"),
+                        value=cfg.get("api_endpoint", ""),
+                        placeholder="API 地址（可选）",
+                        key="douyin_api_endpoint",
+                    )
                 with c4:
+                    default_model = "paraformer-v2" if asr_mode_display == mode_transcription else "qwen3-asr-flash"
                     st.text_input(
                         tr("douyin_parser.api_model"),
-                        value=cfg.get("api_model", "paraformer-v2"),
-                        placeholder="paraformer-v2",
+                        value=cfg.get("api_model", default_model),
+                        placeholder=default_model,
                         key="douyin_api_model",
                     )
                 with c5:
                     st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
                     if st.button("💾 保存", key="douyin_save_config", use_container_width=True):
+                        asr_mode_value = "transcription" if asr_mode_display == mode_transcription else "chat"
                         config_manager.set_douyin_parser_config(
-                            asr_mode="api",
+                            asr_mode=asr_mode_value,
                             api_endpoint=st.session_state.get("douyin_api_endpoint", ""),
                             api_key=st.session_state.get("douyin_api_key", ""),
-                            api_model=st.session_state.get("douyin_api_model", "paraformer-v2"),
+                            api_model=st.session_state.get("douyin_api_model", default_model),
                         )
                         config_manager.save()
                         st.success("✅ 配置已保存")
@@ -377,17 +466,17 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.error(tr("douyin_parser.url_search_page"))
                     return
 
-                asr_mode = "api" if asr_mode_display == mode_api else "local"
+                asr_mode = mode_map.get(asr_mode_display, "local")
                 endpoint = st.session_state.get("douyin_api_endpoint", "")
                 api_key = st.session_state.get("douyin_api_key", "")
                 api_model = st.session_state.get("douyin_api_model", "")
 
-                if asr_mode == "api":
+                if asr_mode != "local":
                     if not api_key or not api_model:
                         st.error(tr("douyin_parser.api_config_required"))
                         return
                     config_manager.set_douyin_parser_config(
-                        asr_mode="api",
+                        asr_mode=asr_mode,
                         api_endpoint=endpoint,
                         api_key=api_key,
                         api_model=api_model,
@@ -405,12 +494,15 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.session_state["douyin_video_url"] = video_url
                     st.session_state["douyin_title"] = info.get("title", "")
 
-                    if asr_mode == "api":
-                        progress_bar.progress(0.2, text="🔊 正在转写...")
-                        text = _transcribe_api(video_url, api_key, api_model)
-                    else:
+                    if asr_mode == "local":
                         progress_bar.progress(0.2, text="⬇️ 下载视频中...")
                         text = _extract_text_asr(video_url)
+                    elif asr_mode == "transcription":
+                        progress_bar.progress(0.2, text="🔊 正在转写...")
+                        text = _transcribe_transcription(video_url, api_key, api_model)
+                    else:
+                        progress_bar.progress(0.2, text="🔊 正在转写...")
+                        text = _transcribe_chat(video_url, endpoint, api_key, api_model)
 
                     st.session_state["douyin_text"] = text
                     progress_bar.progress(1.0, text="✅ 提取完成！")

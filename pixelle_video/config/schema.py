@@ -90,10 +90,10 @@ class TemplateConfig(BaseModel):
 
 class DouyinParserConfig(BaseModel):
     """Douyin parser ASR configuration"""
-    asr_mode: str = Field(default="local", description="ASR mode: 'local' or 'api'")
+    asr_mode: str = Field(default="local", description="ASR mode: 'local', 'transcription', or 'chat'")
     api_endpoint: str = Field(default="", description="ASR API endpoint URL")
     api_key: str = Field(default="", description="ASR API key")
-    api_model: str = Field(default="qwen3-asr-flash", description="ASR API model name")
+    api_model: str = Field(default="paraformer-v2", description="ASR API model name")
 
 
 class PixelleVideoConfig(BaseModel):
