@@ -56,21 +56,30 @@ def _extract_url(text: str) -> Optional[str]:
 def _validate_url(url: str) -> Optional[str]:
     if "/search/" in url or "/user/" in url or "/discover/" in url:
         return "search"
+    if "/short-video/" in url or "v.kuaishou.com" in url or "kuaishou.com/f/" in url:
+        return "kuaishou"
     if "/video/" in url or "/note/" in url or "v.douyin.com" in url:
-        return "video"
+        return "douyin"
     return None
 
 
-def _get_video_info(url: str) -> dict:
+def _get_video_info(url: str, platform: str = "douyin") -> dict:
     t_all = time.time()
-    logger.info("[抖音解析] === 开始解析 ===")
+    logger.info(f"[视频解析] === {platform.upper()} 开始解析 ===")
 
+    if platform == "douyin":
+        return _get_douyin_info(url, t_all)
+    else:
+        return _get_kuaishou_info(url, t_all)
+
+
+def _get_douyin_info(url: str, t_all: float) -> dict:
     if "v.douyin.com" in url:
         with httpx.Client(follow_redirects=True, timeout=10.0) as client:
             resp = client.head(url, follow_redirects=True)
             resolved = str(resp.url)
             if "douyin.com/video/" in resolved or "iesdouyin.com/share/video/" in resolved:
-                logger.info(f"[抖音解析] 短链接解析: {url} -> {resolved}")
+                logger.info(f"[视频解析] 抖音短链接解析: {url} -> {resolved}")
                 url = resolved
             else:
                 raise RuntimeError(f"Short link did not resolve to video: {resolved}")
@@ -83,11 +92,11 @@ def _get_video_info(url: str) -> dict:
         raise RuntimeError("Unsupported Douyin URL format")
 
     t_fetch = time.time()
-    logger.info(f"[抖音解析] 获取页面 HTML... (URL: {url[:60]})")
+    logger.info(f"[视频解析] 获取抖音页面 HTML... (URL: {url[:60]})")
     with httpx.Client(timeout=15.0, headers=_HEADERS) as client:
         resp = client.get(url)
         resp.raise_for_status()
-    logger.info(f"[抖音解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
+    logger.info(f"[视频解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
 
     pattern = re.compile(r"window\._ROUTER_DATA\s*=\s*(.*?)</script>", re.DOTALL)
     match = pattern.search(resp.text)
@@ -109,7 +118,87 @@ def _get_video_info(url: str) -> dict:
     title = item.get("desc", "").strip() or f"douyin_{video_id}"
 
     total = time.time() - t_all
-    logger.info(f"[抖音解析] === 解析完成 === 总耗时 {total:.1f}s, 标题: {title[:30]}")
+    logger.info(f"[视频解析] === 抖音解析完成 === 总耗时 {total:.1f}s, 标题: {title[:30]}")
+
+    return {
+        "title": re.sub(r"[\\\\/:*?\"<>|]", "_", title),
+        "url": video_url,
+        "webpage_url": url,
+    }
+
+
+def _get_kuaishou_info(url: str, t_all: float) -> dict:
+    if "v.kuaishou.com" in url or "kuaishou.com/f/" in url:
+        with httpx.Client(follow_redirects=True, timeout=10.0) as client:
+            resp = client.head(url, follow_redirects=True)
+            resolved = str(resp.url)
+            logger.info(f"[视频解析] 快手短链接解析: {url} -> {resolved}")
+            url = resolved
+
+    if "/short-video/" not in url:
+        raise RuntimeError("Unsupported Kuaishou URL format")
+    video_id = url.split("/short-video/")[-1].split("?")[0].split("/")[0]
+
+    t_fetch = time.time()
+    logger.info(f"[视频解析] 获取快手页面 HTML... (URL: {url[:60]})")
+    with httpx.Client(timeout=15.0, headers={**_HEADERS, "Referer": "https://www.kuaishou.com/"}) as client:
+        resp = client.get(url)
+        resp.raise_for_status()
+    logger.info(f"[视频解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
+
+    pattern = re.compile(r"window\.__APOLLO_STATE__\s*=\s*(\{.*?\});\s*\(function\(\)", re.DOTALL)
+    match = pattern.search(resp.text)
+    if not match:
+        raise RuntimeError("Failed to extract __APOLLO_STATE__ from page HTML")
+
+    data = json.loads(match.group(1))
+    client_data = data.get("defaultClient", data)
+
+    photo_key = next(
+        (k for k, v in client_data.items()
+         if isinstance(v, dict) and v.get("__typename") == "VisionVideoDetailPhoto"),
+        None,
+    )
+    if not photo_key:
+        raise RuntimeError("No video data found in page")
+
+    photo = client_data[photo_key]
+    video_url = photo.get("photoH265Url") or photo.get("photoUrl")
+    if not video_url and photo.get("videoResource"):
+        vr = photo["videoResource"]
+        if isinstance(vr, dict):
+            vr_json = vr.get("json", {})
+            if callable(vr_json):
+                vr_json = vr_json()
+            if isinstance(vr_json, dict):
+                for codec in ("hevc", "h264"):
+                    for a in vr_json.get(codec, {}).get("adaptationSet", []):
+                        for r in a.get("representation", []):
+                            if r.get("url"):
+                                video_url = r["url"]
+                                break
+                        if video_url:
+                            break
+                if not video_url:
+                    vr_str = vr_json if isinstance(vr_json, str) else json.dumps(vr_json)
+                    vr_data = json.loads(vr_str) if isinstance(vr_str, str) else vr_json
+                    for codec in ("hevc", "h264"):
+                        for a in vr_data.get(codec, {}).get("adaptationSet", []):
+                            for r in a.get("representation", []):
+                                if r.get("url"):
+                                    video_url = r["url"]
+                                    break
+                            if video_url:
+                                break
+                    if not video_url:
+                        raise RuntimeError("No video URL found in videoResource")
+    if not video_url:
+        raise RuntimeError("No video URL found in page")
+
+    title = photo.get("caption", f"kuaishou_{video_id}").strip()
+
+    total = time.time() - t_all
+    logger.info(f"[视频解析] === 快手解析完成 === 总耗时 {total:.1f}s, 标题: {title[:30]}")
 
     return {
         "title": re.sub(r"[\\\\/:*?\"<>|]", "_", title),
@@ -393,7 +482,7 @@ class DouyinParserPipelineUI(PipelineUI):
 
         url_input = st.text_area(
             tr("douyin_parser.url_label"),
-            placeholder="https://v.douyin.com/xxxxx  or  https://www.douyin.com/video/xxxxx",
+                        placeholder="抖音: https://v.douyin.com/xxxxx  快手: https://v.kuaishou.com/xxxxx",
             label_visibility="collapsed",
             key="douyin_url_input",
         )
@@ -417,7 +506,7 @@ class DouyinParserPipelineUI(PipelineUI):
                 progress_area = st.empty()
                 progress_area.info("⏳ 正在解析视频信息...")
                 try:
-                    info = _get_video_info(url)
+                    info = _get_video_info(url, url_type or "douyin")
                     st.session_state["douyin_info"] = info
                     st.session_state["douyin_video_url"] = info.get("url") or info.get("webpage_url", "")
                     st.session_state["douyin_title"] = info.get("title", "")
@@ -473,7 +562,7 @@ class DouyinParserPipelineUI(PipelineUI):
                 progress_bar = st.progress(0, text="⏳ 准备中...")
                 try:
                     progress_bar.progress(0.1, text="📡 获取视频信息...")
-                    info = _get_video_info(url)
+                    info = _get_video_info(url, url_type or "douyin")
                     video_url = info.get("url") or info.get("webpage_url", "")
                     st.session_state["douyin_video_url"] = video_url
                     st.session_state["douyin_title"] = info.get("title", "")

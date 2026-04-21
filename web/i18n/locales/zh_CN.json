@@ -554,7 +554,7 @@
     "video_lipsync.task_failed": "口型同步任务执行失败：{msg}",
     "pipeline.douyin_parser.name": "抖音视频解析",
     "pipeline.douyin_parser.description": "输入抖音视频链接，自动提取视频文案",
-    "douyin_parser.url_label": "粘贴抖音分享链接...",
+    "douyin_parser.url_label": "粘贴抖音或快手分享链接...",
     "douyin_parser.btn_parse_info": "获取信息",
     "douyin_parser.btn_extract_text": "提取文案",
     "douyin_parser.url_required": "请先粘贴抖音链接",

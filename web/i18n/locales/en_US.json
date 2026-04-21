@@ -554,7 +554,7 @@
     "tts.error.no_audio": "TTS workflow did not return audio",
     "pipeline.douyin_parser.name": "Douyin Parser",
     "pipeline.douyin_parser.description": "Parse a Douyin video URL and extract the script via ASR",
-    "douyin_parser.url_label": "Paste Douyin share link here...",
+    "douyin_parser.url_label": "Paste Douyin or Kuaishou share link...",
     "douyin_parser.btn_parse_info": "Get Info",
     "douyin_parser.btn_extract_text": "Extract Script",
     "douyin_parser.url_required": "Please paste a Douyin link first",
