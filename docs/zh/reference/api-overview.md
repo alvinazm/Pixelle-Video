@@ -43,7 +43,7 @@ await pixelle.initialize()
 启动 API 服务器：
 
 ```bash
-uv run uvicorn api.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn api.app:app --host 0.0.0.0 --port 8500
 ```
 
 ### 视频生成 - 同步
@@ -74,7 +74,7 @@ uv run uvicorn api.app:app --host 0.0.0.0 --port 8000
 {
   "success": true,
   "message": "Success",
-  "video_url": "http://localhost:8000/api/files/xxx/final.mp4",
+  "video_url": "http://localhost:8500/api/files/xxx/final.mp4",
   "duration": 45.5,
   "file_size": 12345678
 }
@@ -107,7 +107,7 @@ uv run uvicorn api.app:app --host 0.0.0.0 --port 8000
   "task_id": "abc123",
   "status": "completed",
   "result": {
-    "video_url": "http://localhost:8000/api/files/xxx/final.mp4",
+    "video_url": "http://localhost:8500/api/files/xxx/final.mp4",
     "duration": 45.5,
     "file_size": 12345678
   }
@@ -137,5 +137,5 @@ uv run uvicorn api.app:app --host 0.0.0.0 --port 8000
 
 ## 更多信息
 
-API 文档也可通过 Swagger UI 访问：`http://localhost:8000/docs`
+API 文档也可通过 Swagger UI 访问：`http://localhost:8500/docs`
 

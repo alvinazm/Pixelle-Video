@@ -43,7 +43,7 @@ Primary method for generating videos.
 Start the API server:
 
 ```bash
-uv run uvicorn api.app:app --host 0.0.0.0 --port 8000
+uv run uvicorn api.app:app --host 0.0.0.0 --port 8500
 ```
 
 ### Video Generation - Synchronous
@@ -74,7 +74,7 @@ Generate video synchronously, waits until completion. Suitable for small videos 
 {
   "success": true,
   "message": "Success",
-  "video_url": "http://localhost:8000/api/files/xxx/final.mp4",
+  "video_url": "http://localhost:8500/api/files/xxx/final.mp4",
   "duration": 45.5,
   "file_size": 12345678
 }
@@ -107,7 +107,7 @@ Generate video asynchronously, returns task ID immediately. Suitable for large v
   "task_id": "abc123",
   "status": "completed",
   "result": {
-    "video_url": "http://localhost:8000/api/files/xxx/final.mp4",
+    "video_url": "http://localhost:8500/api/files/xxx/final.mp4",
     "duration": 45.5,
     "file_size": 12345678
   }
@@ -137,5 +137,5 @@ Generate video asynchronously, returns task ID immediately. Suitable for large v
 
 ## More Information
 
-API documentation is also available via Swagger UI: `http://localhost:8000/docs`
+API documentation is also available via Swagger UI: `http://localhost:8500/docs`
 
