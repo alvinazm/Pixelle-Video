@@ -124,8 +124,11 @@ def _rewrite_with_ai(text: str) -> str:
     logger.info(f"[AI改写] API响应完成, 耗时: {t4-t3:.3f}s | status=ok")
 
     result = resp.choices[0].message.content.strip()
-    result = re.sub(r"<think>[\s\S]*?</think>", "", result).strip()
-    result = re.sub(r"^\s*\.{3,}\s*", "", result).strip()
+    # 过滤各种思考标签
+    result = re.sub(r"<thinking>[\s\S]*?</thinking>", "", result, flags=re.IGNORECASE)
+    result = re.sub(r"<think>[\s\S]*?</think>", "", result, flags=re.IGNORECASE)
+    # 过滤引导省略号
+    result = re.sub(r"^\s*\.{3,}\s*", "", result, flags=re.MULTILINE)
     lines = result.splitlines()
     lines = [l for l in lines if not re.match(r"^\s*\.{3,}\s*$", l)]
     result = "\n".join(lines).strip()
