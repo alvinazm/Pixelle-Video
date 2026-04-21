@@ -559,6 +559,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     config_manager.set_douyin_parser_config(asr_mode="local")
                     config_manager.save()
 
+                st.session_state["douyin_text"] = ""
                 progress_bar = st.progress(0, text="⏳ 准备中...")
                 try:
                     progress_bar.progress(0.1, text="📡 获取视频信息...")
