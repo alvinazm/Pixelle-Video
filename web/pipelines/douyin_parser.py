@@ -273,45 +273,34 @@ def _extract_text_asr(video_url: str) -> str:
     logger.info("[抖音解析] === 本地模式提取文案 ===")
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="douyin_"))
-    mp4_path = tmp_dir / "video.mp4"
     wav_path = tmp_dir / "audio.wav"
 
-    t_dl = time.time()
-    logger.info("[抖音解析] [1/4] 下载视频...")
-    with httpx.Client(follow_redirects=True, timeout=120.0, headers=_HEADERS) as client:
-        with client.stream("GET", video_url) as resp:
-            resp.raise_for_status()
-            with open(mp4_path, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
-    size_mb = mp4_path.stat().st_size / 1024 / 1024
-    speed_mbps = size_mb / (time.time() - t_dl)
-    logger.info(f"[抖音解析] [1/4] 下载完成 {size_mb:.1f}MB, {time.time()-t_dl:.1f}s, {speed_mbps:.1f}MB/s")
-
     t_audio = time.time()
-    logger.info("[抖音解析] [2/4] 提取音频...")
-    ffmpeg_result = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(mp4_path), "-vn", "-acodec", "pcm_s16le",
+    logger.info("[抖音解析] [1/3] 流式下载+转码...")
+    ref_headers = {**{"Referer": "https://www.douyin.com/"}, **_HEADERS}
+    proc = subprocess.Popen(
+        ["ffmpeg", "-y", "-headers", "".join(f"{k}: {v}\r\n" for k, v in ref_headers.items()),
+         "-i", video_url, "-vn", "-acodec", "pcm_s16le",
          "-ar", "16000", "-ac", "1", str(wav_path)],
-        capture_output=True, timeout=120,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    if ffmpeg_result.returncode != 0:
-        err = ffmpeg_result.stderr.decode(errors="replace")[-200:]
-        raise RuntimeError(f"ffmpeg failed: {err}")
-    logger.info(f"[抖音解析] [2/4] 音频完成, {time.time()-t_audio:.1f}s")
+    proc.wait(timeout=300)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.read().decode(errors='replace')[-300:]}")
+    logger.info(f"[抖音解析] [1/3] 音频完成, {time.time()-t_audio:.1f}s")
 
     t_model = time.time()
-    logger.info("[抖音解析] [3/4] 加载模型...")
+    logger.info("[抖音解析] [2/3] 加载模型...")
     model = _get_whisper_model()
-    logger.info(f"[抖音解析] [3/4] 模型就绪, {time.time()-t_model:.1f}s")
+    logger.info(f"[抖音解析] [2/3] 模型就绪, {time.time()-t_model:.1f}s")
 
     t_asr = time.time()
-    logger.info("[抖音解析] [4/4] 语音转写...")
+    logger.info("[抖音解析] [3/3] 语音转写...")
     segments, info = model.transcribe(str(wav_path), language="zh", beam_size=5)
     text = "".join(seg.text for seg in segments)
     duration_s = info.duration
     rtf = (time.time() - t_asr) / duration_s if duration_s > 0 else 0
-    logger.info(f"[抖音解析] [4/4] 转写完成, 时长 {duration_s:.0f}s, RTF={rtf:.3f}, {time.time()-t_asr:.1f}s, {len(text)}字")
+    logger.info(f"[抖音解析] [3/3] 转写完成, 时长 {duration_s:.0f}s, RTF={rtf:.3f}, {time.time()-t_asr:.1f}s, {len(text)}字")
 
     try:
         import zhconv
@@ -322,12 +311,6 @@ def _extract_text_asr(video_url: str) -> str:
 
     total = time.time() - t_all
     logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
-
-    out_dir = Path("output/download_video")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"douyin_{int(time.time())}.mp4"
-    shutil.copy2(mp4_path, out_path)
-    logger.info(f"[抖音解析] 视频已保存: {out_path}")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
     return text
