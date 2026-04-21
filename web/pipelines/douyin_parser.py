@@ -26,6 +26,7 @@ from urllib import request
 import dashscope
 import httpx
 import streamlit as st
+import streamlit.components.v1 as components
 from loguru import logger
 
 from web.i18n import tr
@@ -42,6 +43,27 @@ _MOBILE_HEADERS = {
 _DESKTOP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
+
+
+def _copy_button(text: str, label: str = "📋 复制文本") -> None:
+    safe_text = text.replace("`", "\\`").replace("${", "\\${")
+    components.html(
+        f"""
+        <button id="cp_btn" style="width:100%;padding:8px;border-radius:5px;border:none;
+            background:#4CAF50;color:white;cursor:pointer;font-size:14px">{label}</button>
+        <textarea id="cp_src" style="display:none">{safe_text}</textarea>
+        <script>
+        document.getElementById('cp_btn').onclick = function() {{
+            var t = document.getElementById('cp_src').value;
+            navigator.clipboard.writeText(t).then(function() {{
+                document.getElementById('cp_btn').textContent = '✅ 已复制';
+                setTimeout(function(){{document.getElementById('cp_btn').textContent = '{label}';}}, 2000);
+            }});
+        }};
+        </script>
+        """,
+        height=42,
+    )
 
 
 def _extract_url(text: str) -> Optional[str]:
@@ -598,13 +620,7 @@ class DouyinParserPipelineUI(PipelineUI):
                         key="douyin_text_display",
                     )
                     c1, c2 = st.columns(2)
-                    c1.download_button(
-                        tr("douyin_parser.btn_copy"),
-                        text,
-                        file_name="douyin_text.txt",
-                        mime="text/plain",
-                        use_container_width=True,
-                    )
+                    _copy_button(text, label=tr("douyin_parser.btn_copy"))
                     c2.download_button(
                         tr("douyin_parser.btn_copy_markdown"),
                         f"# {st.session_state.get('douyin_title', '抖音文案')}\n\n{text}",
