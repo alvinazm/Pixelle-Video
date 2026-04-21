@@ -125,6 +125,10 @@ def _rewrite_with_ai(text: str) -> str:
 
     result = resp.choices[0].message.content.strip()
     result = re.sub(r"<think>[\s\S]*?</think>", "", result).strip()
+    result = re.sub(r"^\s*\.{3,}\s*", "", result).strip()
+    lines = result.splitlines()
+    lines = [l for l in lines if not re.match(r"^\s*\.{3,}\s*$", l)]
+    result = "\n".join(lines).strip()
     logger.info(f"[AI改写] 解析结果完成, 返回长度: {len(result)} 字 (已过滤think标签)")
     logger.info(f"[AI改写] 总耗时: {time_mod.time()-t0:.3f}s")
     return result
