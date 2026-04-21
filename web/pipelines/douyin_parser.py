@@ -35,7 +35,11 @@ from pixelle_video.config import config_manager
 _whisper_model = None
 _whisper_lock = threading.Lock()
 
-_HEADERS = {
+_MOBILE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1"
+}
+
+_DESKTOP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
@@ -76,24 +80,26 @@ def _get_video_info(url: str, platform: str = "douyin") -> dict:
 def _get_douyin_info(url: str, t_all: float) -> dict:
     if "v.douyin.com" in url:
         with httpx.Client(follow_redirects=True, timeout=10.0) as client:
-            resp = client.head(url, follow_redirects=True)
+            resp = client.get(url, follow_redirects=True)
             resolved = str(resp.url)
-            if "douyin.com/video/" in resolved or "iesdouyin.com/share/video/" in resolved:
+            if "/video/" in resolved:
                 logger.info(f"[视频解析] 抖音短链接解析: {url} -> {resolved}")
                 url = resolved
             else:
-                raise RuntimeError(f"Short link did not resolve to video: {resolved}")
+                raise RuntimeError(
+                    "短链接未解析到视频页面，可能是抖音限制了自动化访问。"
+                    "请使用完整的视频页面链接（包含 /video/）"
+                )
 
-    if "/video/" in url or "iesdouyin.com/share/video/" in url:
-        parts = url.split("?")[0].strip("/").split("/")
-        video_id = parts[-1]
-        url = f"https://www.iesdouyin.com/share/video/{video_id}"
-    else:
-        raise RuntimeError("Unsupported Douyin URL format")
+    # 抖音视频ID提取（兼容两种域名）
+    parts = url.split("?")[0].strip("/").split("/")
+    video_id = parts[-1]
+    # 用 iesdouyin.com（不跟随重定向，获取 _ROUTER_DATA）
+    url = f"https://www.iesdouyin.com/share/video/{video_id}"
 
     t_fetch = time.time()
     logger.info(f"[视频解析] 获取抖音页面 HTML... (URL: {url[:60]})")
-    with httpx.Client(timeout=15.0, headers=_HEADERS) as client:
+    with httpx.Client(timeout=15.0, headers=_MOBILE_HEADERS) as client:
         resp = client.get(url)
         resp.raise_for_status()
     logger.info(f"[视频解析] 页面获取完成, 耗时 {time.time()-t_fetch:.1f}s, HTML: {len(resp.text)/1024:.0f}KB")
@@ -130,7 +136,7 @@ def _get_douyin_info(url: str, t_all: float) -> dict:
 def _get_kuaishou_info(url: str, t_all: float) -> dict:
     t_fetch = time.time()
     logger.info(f"[视频解析] 获取快手页面 HTML... (URL: {url[:60]})")
-    with httpx.Client(follow_redirects=True, timeout=15.0, headers={**_HEADERS, "Referer": "https://www.kuaishou.com/"}) as client:
+    with httpx.Client(follow_redirects=True, timeout=15.0, headers={**_DESKTOP_HEADERS, "Referer": "https://www.kuaishou.com/"}) as client:
         resp = client.get(url)
         resp.raise_for_status()
     url = str(resp.url)
@@ -273,7 +279,7 @@ def _transcribe_chat(video_url: str, api_endpoint: str, api_key: str, model: str
 
     t_audio = time.time()
     logger.info("[抖音解析] [1/3] 流式下载+转码...")
-    ref_headers = {**{"Referer": "https://www.douyin.com/"}, **_HEADERS}
+    ref_headers = {**{"Referer": "https://www.iesdouyin.com/"}, **_MOBILE_HEADERS}
     proc = subprocess.Popen(
         ["ffmpeg", "-y", "-headers", "".join(f"{k}: {v}\r\n" for k, v in ref_headers.items()),
          "-i", video_url, "-vn",
@@ -360,7 +366,7 @@ def _extract_text_asr(video_url: str) -> str:
 
     t_audio = time.time()
     logger.info("[抖音解析] [1/3] 流式下载+转码...")
-    ref_headers = {**{"Referer": "https://www.douyin.com/"}, **_HEADERS}
+    ref_headers = {**{"Referer": "https://www.iesdouyin.com/"}, **_MOBILE_HEADERS}
     proc = subprocess.Popen(
         ["ffmpeg", "-y", "-headers", "".join(f"{k}: {v}\r\n" for k, v in ref_headers.items()),
          "-i", video_url, "-vn", "-acodec", "pcm_s16le",
