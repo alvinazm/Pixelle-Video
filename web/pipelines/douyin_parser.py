@@ -80,11 +80,17 @@ def _copy_button(text: str, btn_copy_label: str = "📋 复制文本", btn_md_la
 
 
 def _rewrite_with_ai(text: str) -> str:
+    import time as time_mod
+    t0 = time_mod.time()
+    logger.info(f"[AI改写] 开始, 文案长度: {len(text)} 字")
+
+    t1 = time_mod.time()
     from pixelle_video.config import config_manager
     llm_cfg = config_manager.get_llm_config()
     api_key = llm_cfg.get("api_key", "")
     base_url = llm_cfg.get("base_url", "")
     model = llm_cfg.get("model", "")
+    logger.info(f"[AI改写] 配置读取完成, 耗时: {time_mod.time()-t1:.3f}s | model={model} base_url={base_url}")
 
     if not api_key or not base_url or not model:
         raise RuntimeError(tr("douyin_parser.llm_not_configured"))
@@ -101,15 +107,26 @@ def _rewrite_with_ai(text: str) -> str:
 
 请直接输出改写后的文案，不需要任何解释："""
 
+    t2 = time_mod.time()
     from openai import OpenAI
     client = OpenAI(api_key=api_key, base_url=base_url)
+    logger.info(f"[AI改写] OpenAI客户端创建完成, 耗时: {time_mod.time()-t2:.3f}s")
+
+    t3 = time_mod.time()
+    logger.info(f"[AI改写] 发送API请求... prompt长度={len(prompt)} 字")
     resp = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
         max_tokens=4000,
     )
-    return resp.choices[0].message.content.strip()
+    t4 = time_mod.time()
+    logger.info(f"[AI改写] API响应完成, 耗时: {t4-t3:.3f}s | status=ok")
+
+    result = resp.choices[0].message.content.strip()
+    logger.info(f"[AI改写] 解析结果完成, 返回长度: {len(result)} 字")
+    logger.info(f"[AI改写] 总耗时: {time_mod.time()-t0:.3f}s")
+    return result
 
 
 def _extract_url(text: str) -> Optional[str]:
@@ -676,10 +693,15 @@ class DouyinParserPipelineUI(PipelineUI):
                         rewrite_ph = st.empty()
                         rewrite_ph.info(tr("douyin_parser.rewriting"))
                         try:
+                            import time as time_mod
+                            t_btn = time_mod.time()
+                            logger.info(f"[AI改写] 按钮点击, 开始改写, 文案长度={len(text)}字")
                             rewritten = _rewrite_with_ai(text)
+                            logger.info(f"[AI改写] 改写成功, 耗时={time_mod.time()-t_btn:.3f}s, 结果长度={len(rewritten)}字")
                             st.session_state["douyin_rewritten_text"] = rewritten
                             rewrite_ph.success(tr("douyin_parser.rewrite_success"))
                         except Exception as e:
+                            logger.error(f"[AI改写] 改写失败: {e}")
                             rewrite_ph.error(tr("douyin_parser.rewrite_failed"))
                             st.error(f"{tr('douyin_parser.error')}: {e}")
 
