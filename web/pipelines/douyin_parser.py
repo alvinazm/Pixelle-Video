@@ -143,38 +143,32 @@ def _transcribe_api(video_url: str, api_endpoint: str, api_key: str, model: str)
     t_all = time.time()
     logger.info(f"[抖音解析] === API 模式 === ({api_endpoint})")
     tmp_dir = Path(tempfile.mkdtemp(prefix="douyin_api_"))
-    mp4_path = tmp_dir / "video.mp4"
     mp3_path = tmp_dir / "audio.mp3"
 
-    t_dl = time.time()
-    logger.info("[抖音解析] [1/4] 下载视频...")
-    with httpx.Client(follow_redirects=True, timeout=120.0, headers=_HEADERS) as client:
-        with client.stream("GET", video_url) as resp:
-            resp.raise_for_status()
-            with open(mp4_path, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
-    size_mb = mp4_path.stat().st_size / 1024 / 1024
-    logger.info(f"[抖音解析] [1/4] 下载完成 {size_mb:.1f}MB, {time.time()-t_dl:.1f}s")
+    import base64
 
+    # 边下载边转 MP3，跳过写盘
     t_audio = time.time()
-    logger.info("[抖音解析] [2/4] 提取音频...")
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-i", str(mp4_path), "-vn",
+    logger.info("[抖音解析] [1/3] 流式下载+转码...")
+    ref_headers = {**{"Referer": "https://www.douyin.com/"}, **_HEADERS}
+    proc = subprocess.Popen(
+        ["ffmpeg", "-y", "-headers", "".join(f"{k}: {v}\r\n" for k, v in ref_headers.items()),
+         "-i", video_url, "-vn",
          "-acodec", "libmp3lame", "-b:a", "32k",
          "-ar", "16000", "-ac", "1", str(mp3_path)],
-        capture_output=True, timeout=120,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')[-200:]}")
-    logger.info(f"[抖音解析] [2/4] 音频完成, {mp3_path.stat().st_size/1024:.0f}KB, {time.time()-t_audio:.1f}s")
+    proc.wait(timeout=120)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.read().decode(errors='replace')[-300:]}")
+    audio_size_kb = mp3_path.stat().st_size / 1024
+    logger.info(f"[抖音解析] [1/3] 音频完成, {audio_size_kb:.0f}KB, {time.time()-t_audio:.1f}s")
 
-    import base64
     audio_b64 = base64.b64encode(mp3_path.read_bytes()).decode()
     logger.info(f"[抖音解析] Base64: {len(audio_b64)/1024:.0f}KB")
 
     t_api = time.time()
-    logger.info(f"[抖音解析] [3/4] API 转写...")
+    logger.info(f"[抖音解析] [2/3] API 转写...")
 
     is_dashscope = "dashscope" in api_endpoint.lower()
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -240,16 +234,10 @@ def _transcribe_api(video_url: str, api_endpoint: str, api_key: str, model: str)
             raise RuntimeError(f"API error {resp.status_code}: {resp.text[:300]}")
         text = resp.json().get("text", "").strip()
 
-    logger.info(f"[抖音解析] [4/4] 转写完成, {len(text)}字, {time.time()-t_api:.1f}s")
+    logger.info(f"[抖音解析] [3/3] 转写完成, {len(text)}字, {time.time()-t_api:.1f}s")
 
     total = time.time() - t_all
     logger.info(f"[抖音解析] === 提取完成 === 总耗时 {total:.1f}s")
-
-    out_dir = Path("output/download_video")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"douyin_{int(time.time())}.mp4"
-    shutil.copy2(mp4_path, out_path)
-    logger.info(f"[抖音解析] 视频已保存: {out_path}")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
     return text
