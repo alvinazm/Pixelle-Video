@@ -191,6 +191,15 @@ class HTMLFrameGenerator:
         """
         PRESET_PARAMS = {"title", "text", "image", "index"}
 
+        # 参数名 -> 中文 label 映射
+        PARAM_LABEL_MAP = {
+            "background": "背景图",
+            "describe": "描述",
+            "author": "作者",
+            "brand": "品牌",
+            "signature": "签名",
+        }
+
         PARAM_PATTERN = r"\{\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([a-z]+))?(?:=([^}]+))?\}\}"
 
         params = {}
@@ -217,7 +226,7 @@ class HTMLFrameGenerator:
             params[param_name] = {
                 "type": param_type,
                 "default": parsed_default,
-                "label": param_name,
+                "label": PARAM_LABEL_MAP.get(param_name, param_name),
             }
 
         if params:

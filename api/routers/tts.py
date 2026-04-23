@@ -44,7 +44,7 @@ async def tts_synthesize(
     Examples:
     ```json
     {
-        "text": "Hello, welcome to Pixelle-Video!",
+        "text": "Hello, welcome to AI-Video!",
         "workflow": "runninghub/tts_edge.json"
     }
     ```

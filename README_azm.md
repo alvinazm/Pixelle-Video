@@ -84,4 +84,5 @@ TTS 服务的 WORKFLOW_PREFIX = "tts_"，所以只有 tts_*.json 才会被识别
 - 页面UI优化
 - 右上角设置功能
 - 返回首页
-- 安装faster-whisper，出现onnxruntime冲突
+- 历史记录
+- 阿里云ECS无法访问：https://v.douyincdn.com/live-record/aweme_videos/aweme-upload/1/video/0/7515042520305290506/7515042520305290506_h264_720p.mp4 ??

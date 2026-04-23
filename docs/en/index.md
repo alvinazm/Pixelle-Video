@@ -14,7 +14,7 @@
 
 ## 🎯 Overview
 
-Simply input a **topic**, and Pixelle-Video will automatically:
+Simply input a **topic**, and AI-Video will automatically:
 
 - ✍️ Write video scripts
 - 🎨 Generate AI images  

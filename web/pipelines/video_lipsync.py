@@ -24,7 +24,7 @@ from loguru import logger
 
 from web.i18n import tr, get_language
 from web.pipelines.base import PipelineUI, register_pipeline_ui
-from web.components.content_input import render_bgm_section, render_version_info
+from web.components.content_input import render_content_input, render_bgm_section
 from web.utils.async_helpers import run_async
 from web.utils.streamlit_helpers import check_and_warn_selfhost_workflow
 from pixelle_video.config import config_manager
@@ -49,7 +49,6 @@ class VideoLipSyncPipelineUI(PipelineUI):
         with left_col:
             video_params = self._render_video_upload()
             bgm_params = render_bgm_section(key_prefix="lipsync_")
-            render_version_info()
 
         with middle_col:
             audio_params = self._render_audio_config(pixelle_video)

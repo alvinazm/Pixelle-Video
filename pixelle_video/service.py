@@ -297,7 +297,7 @@ class PixelleVideoCore:
     @property
     def project_name(self) -> str:
         """Get project name from config"""
-        return self.config.get("project_name", "Pixelle-Video")
+        return self.config.get("project_name", "AI-Video")
     
     def __repr__(self) -> str:
         """String representation"""

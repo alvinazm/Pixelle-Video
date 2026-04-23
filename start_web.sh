@@ -1,7 +1,7 @@
 #!/bin/bash
-# Start Pixelle-Video Web UI
+# Start  Web UI
 
-echo "🚀 Starting Pixelle-Video Web UI..."
+echo "🚀 Starting Ai-Video Web UI..."
 echo ""
 
 PORT=8501
