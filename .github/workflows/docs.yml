@@ -31,14 +31,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-docs.txt') }}
+          key: ${{ runner.os }}-pip-pyproject
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements-docs.txt
+          pip install -e ".[docs]"
 
       - name: Build and deploy documentation
         run: mkdocs gh-deploy --force
