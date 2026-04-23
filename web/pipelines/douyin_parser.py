@@ -79,10 +79,10 @@ def _copy_button(text: str, btn_copy_label: str = "📋 复制文本", btn_md_la
     )
 
 
-def _rewrite_with_ai(text: str) -> str:
+def _rewrite_with_ai(text: str, custom_prompt: str = "") -> str:
     import time as time_mod
     t0 = time_mod.time()
-    logger.info(f"[AI改写] 开始, 文案长度: {len(text)} 字")
+    logger.info(f"[AI改写] 开始, 文案长度: {len(text)} 字, 自定义提示词: {len(custom_prompt)} 字")
 
     t1 = time_mod.time()
     from pixelle_video.config import config_manager
@@ -95,7 +95,17 @@ def _rewrite_with_ai(text: str) -> str:
     if not api_key or not base_url or not model:
         raise RuntimeError(tr("douyin_parser.llm_not_configured"))
 
-    prompt = f"""请将以下视频文案进行优化改写，让它更适合短视频口播表达。
+    # 使用用户自定义提示词，否则使用默认提示词
+    if custom_prompt and custom_prompt.strip():
+        prompt = f"""{custom_prompt.strip()}
+
+原文案：
+{text}
+
+请直接输出改写后的文案，不需要任何解释："""
+        logger.info(f"[AI改写] 使用自定义提示词，长度: {len(custom_prompt)} 字")
+    else:
+        prompt = f"""请将以下视频文案进行优化改写，让它更适合短视频口播表达。
 要求：
 1. 语言自然流畅，符合口语化表达
 2. 保留原文案的核心内容和情感
@@ -106,6 +116,7 @@ def _rewrite_with_ai(text: str) -> str:
 {text}
 
 请直接输出改写后的文案，不需要任何解释："""
+        logger.info("[AI改写] 使用默认提示词")
 
     t2 = time_mod.time()
     from openai import OpenAI
@@ -570,6 +581,21 @@ class DouyinParserPipelineUI(PipelineUI):
     def description(self):
         return tr("pipeline.douyin_parser.description")
 
+    @staticmethod
+    def _on_rewrite_mode_change():
+        """selectbox 切换模式时，重置提示词缓存并强制重渲染"""
+        import streamlit as st
+        # 标记模式已切换，下次渲染 text_area 时加载对应模式的默认模板
+        st.session_state["douyin_mode_switched"] = True
+        st.session_state["douyin_custom_prompt"] = ""
+        # 同步更新 mode_idx
+        mode_text = st.session_state.get("douyin_rewrite_mode", "")
+        from web.i18n import tr
+        st.session_state["douyin_rewrite_mode_idx"] = (
+            0 if mode_text == tr("douyin_parser.ai_rewrite_mode_editor") else 1
+        )
+        # 已在 selectbox on_change 中由 Streamlit 自动触发 rerun，无需手动调用 st.rerun()
+
     def render(self, pixelle_video: Any):
         cfg = config_manager.get_douyin_parser_config()
         if cfg["asr_mode"] == "local":
@@ -650,56 +676,29 @@ class DouyinParserPipelineUI(PipelineUI):
             key="douyin_url_input",
         )
 
-        col_info, col_text = st.columns(2)
-
-        with col_info:
-            if st.button(tr("douyin_parser.btn_parse_info"), use_container_width=True, type="secondary"):
-                if not url_input:
-                    st.warning(tr("douyin_parser.url_required"))
-                    return
-                url = _extract_url(url_input)
-                if not url:
-                    st.warning(tr("douyin_parser.url_invalid"))
-                    return
-                url_type = _validate_url(url)
-                if url_type == "search":
-                    st.error(tr("douyin_parser.url_search_page"))
-                    return
-
-                progress_area = st.empty()
-                progress_area.info("⏳ 正在解析视频信息...")
-                try:
-                    info = _get_video_info(url, url_type or "douyin")
-                    st.session_state["douyin_info"] = info
-                    st.session_state["douyin_video_url"] = info.get("url") or info.get("webpage_url", "")
-                    st.session_state["douyin_title"] = info.get("title", "")
-                    st.session_state["douyin_text"] = ""
-                    st.session_state["douyin_rewritten_text"] = ""
-                    progress_area.success("✅ 解析完成")
-                    st.rerun()
-                except Exception as e:
-                    logger.error(f"[抖音解析] 解析失败: {e}")
-                    progress_area.error(f"❌ {e}")
-
-            if "douyin_info" in st.session_state:
-                info = st.session_state["douyin_info"]
-                with st.container(border=True):
-                    st.markdown(f"**{tr('douyin_parser.video_info')}**")
-                    st.write(f"**{tr('douyin_parser.field_title')}:** {info.get('title', 'N/A')}")
-                    if info.get("webpage_url"):
-                        st.markdown(f"**{tr('douyin_parser.field_url')}:** [{info['webpage_url']}]({info['webpage_url']})")
+        col_text = st.columns([1])[0]
 
         with col_text:
-            if st.button(tr("douyin_parser.btn_extract_text"), use_container_width=True, type="primary"):
+            disabled_extracting = st.session_state.get("douyin_extracting", False)
+            if st.button(
+                tr("douyin_parser.btn_extract_text"),
+                use_container_width=True,
+                type="primary",
+                disabled=disabled_extracting,
+            ):
+                st.session_state["douyin_extracting"] = True
                 if not url_input:
+                    st.session_state["douyin_extracting"] = False
                     st.warning(tr("douyin_parser.url_required"))
                     return
                 url = _extract_url(url_input)
                 if not url:
+                    st.session_state["douyin_extracting"] = False
                     st.warning(tr("douyin_parser.url_invalid"))
                     return
                 url_type = _validate_url(url)
                 if url_type == "search":
+                    st.session_state["douyin_extracting"] = False
                     st.error(tr("douyin_parser.url_search_page"))
                     return
 
@@ -710,6 +709,7 @@ class DouyinParserPipelineUI(PipelineUI):
 
                 if asr_mode != "local":
                     if not api_key or not api_model:
+                        st.session_state["douyin_extracting"] = False
                         st.error(tr("douyin_parser.api_config_required"))
                         return
                     config_manager.set_douyin_parser_config(
@@ -765,6 +765,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     progress_bar.progress(1.0, text="✅ 提取完成！")
                     st.rerun()
                 except Exception as e:
+                    st.session_state["douyin_extracting"] = False
                     logger.error(f"[抖音解析] 提取失败: {e}")
                     progress_bar.progress(1.0, text=f"❌ 提取失败: {e}")
                     st.error(f"{tr('douyin_parser.error')}: {e}")
@@ -782,21 +783,71 @@ class DouyinParserPipelineUI(PipelineUI):
                     )
                     rewritten = st.session_state.get("douyin_rewritten_text", "")
                     rewrite_placeholder = tr("douyin_parser.rewrite_placeholder")
+
+                    # 记录当前选中模式的原始索引（用于检测切换）
+                    if "douyin_rewrite_mode_idx" not in st.session_state:
+                        st.session_state["douyin_rewrite_mode_idx"] = 0
+
+                    # AI改写模式选择
+                    st.markdown(f"**{tr('douyin_parser.ai_rewrite_mode_label')}**")
+                    rewrite_mode = st.selectbox(
+                        tr("douyin_parser.ai_rewrite_mode_label"),
+                        [
+                            tr("douyin_parser.ai_rewrite_mode_editor"),
+                            tr("douyin_parser.ai_rewrite_mode_empty"),
+                        ],
+                        index=st.session_state["douyin_rewrite_mode_idx"],
+                        label_visibility="collapsed",
+                        key="douyin_rewrite_mode",
+                        on_change=self._on_rewrite_mode_change,
+                    )
+
+                    mode_is_editor = rewrite_mode == tr("douyin_parser.ai_rewrite_mode_editor")
+
+                    # 提示词预览/编辑区
+                    default_prompt = (
+                        tr("douyin_parser.ai_rewrite_template")
+                        if mode_is_editor
+                        else ""
+                    )
+                    # 通过单独 flag 检测模式切换（避免依赖 text_area 的 key）
+                    if st.session_state.get("douyin_mode_switched"):
+                        initial_value = default_prompt
+                        st.session_state["douyin_mode_switched"] = False
+                    else:
+                        initial_value = st.session_state.get(
+                            "douyin_custom_prompt_display", default_prompt
+                        )
+                    prompt_display = st.text_area(
+                        tr("douyin_parser.ai_rewrite_prompt_preview"),
+                        value=initial_value,
+                        height=200,
+                        label_visibility="collapsed",
+                    )
+                    st.session_state["douyin_custom_prompt_display"] = prompt_display
+
+                    disabled_rewriting = st.session_state.get("douyin_rewriting", False)
                     if st.button(
                         f"{tr('douyin_parser.btn_ai_rewrite')}",
                         use_container_width=True,
+                        type="primary",
+                        disabled=disabled_rewriting,
                     ):
+                        st.session_state["douyin_rewriting"] = True
+                        st.session_state["douyin_custom_prompt"] = prompt_display
                         rewrite_ph = st.empty()
                         rewrite_ph.info(tr("douyin_parser.rewriting"))
                         try:
                             import time as time_mod
                             t_btn = time_mod.time()
-                            logger.info(f"[AI改写] 按钮点击, 开始改写, 文案长度={len(text)}字")
-                            rewritten = _rewrite_with_ai(text)
+                            logger.info(f"[AI改写] 按钮点击, 开始改写, 文案长度={len(text)}字, 模式={'editor' if mode_is_editor else 'empty'}")
+                            rewritten = _rewrite_with_ai(text, custom_prompt=prompt_display)
                             logger.info(f"[AI改写] 改写成功, 耗时={time_mod.time()-t_btn:.3f}s, 结果长度={len(rewritten)}字")
                             st.session_state["douyin_rewritten_text"] = rewritten
+                            st.session_state["douyin_rewriting"] = False
                             rewrite_ph.success(tr("douyin_parser.rewrite_success"))
                         except Exception as e:
+                            st.session_state["douyin_rewriting"] = False
                             logger.error(f"[AI改写] 改写失败: {e}")
                             rewrite_ph.error(tr("douyin_parser.rewrite_failed"))
                             st.error(f"{tr('douyin_parser.error')}: {e}")
