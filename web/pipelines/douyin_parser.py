@@ -680,6 +680,8 @@ class DouyinParserPipelineUI(PipelineUI):
 
         with col_text:
             disabled_extracting = st.session_state.get("douyin_extracting", False)
+            # 检测是否是按钮触发后的第二次渲染（第一次触发 rerun，第二次执行实际逻辑）
+            extract_queued = st.session_state.pop("douyin_extract_queued", False)
             if st.button(
                 tr("douyin_parser.btn_extract_text"),
                 use_container_width=True,
@@ -687,6 +689,11 @@ class DouyinParserPipelineUI(PipelineUI):
                 disabled=disabled_extracting,
             ):
                 st.session_state["douyin_extracting"] = True
+                st.session_state["douyin_extract_queued"] = True
+                st.rerun()
+
+            # 第二次渲染：按钮已置灰，开始执行实际提取逻辑
+            if extract_queued:
                 if not url_input:
                     st.session_state["douyin_extracting"] = False
                     st.warning(tr("douyin_parser.url_required"))
@@ -827,6 +834,7 @@ class DouyinParserPipelineUI(PipelineUI):
                     st.session_state["douyin_custom_prompt_display"] = prompt_display
 
                     disabled_rewriting = st.session_state.get("douyin_rewriting", False)
+                    rewrite_queued = st.session_state.pop("douyin_rewrite_queued", False)
                     if st.button(
                         f"{tr('douyin_parser.btn_ai_rewrite')}",
                         use_container_width=True,
@@ -835,6 +843,11 @@ class DouyinParserPipelineUI(PipelineUI):
                     ):
                         st.session_state["douyin_rewriting"] = True
                         st.session_state["douyin_custom_prompt"] = prompt_display
+                        st.session_state["douyin_rewrite_queued"] = True
+                        st.rerun()
+
+                    # 第二次渲染：按钮已置灰，显示"改写中"并执行实际改写
+                    if rewrite_queued:
                         rewrite_ph = st.empty()
                         rewrite_ph.info(tr("douyin_parser.rewriting"))
                         try:
