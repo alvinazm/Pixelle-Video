@@ -14,6 +14,7 @@
 Content input components for web UI (left column)
 """
 
+import os
 import streamlit as st
 
 from web.i18n import tr
@@ -198,33 +199,101 @@ def render_bgm_section(key_prefix=""):
             st.markdown(f"**{tr('help.how')}**")
             st.markdown(tr("bgm.how"))
         
-        # Dynamically scan bgm folder for music files (merged from bgm/ and data/bgm/)
         from pixelle_video.utils.os_util import list_resource_files
         
+        # ── 自定义上传区域 ──────────────────────────────────────────────
+        custom_upload_label = tr("bgm.custom_title")
+        with st.expander(custom_upload_label, expanded=False):
+            # 读取已上传的自定义文件
+            from pixelle_video.utils.os_util import get_pixelle_video_root_path
+            root = get_pixelle_video_root_path()
+            custom_dir = os.path.join(root, "bgm", "custom")
+            os.makedirs(custom_dir, exist_ok=True)
+
+            audio_extensions = ('.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg')
+            existing_custom = []
+            if os.path.isdir(custom_dir):
+                existing_custom = sorted([
+                    f for f in os.listdir(custom_dir)
+                    if f.lower().endswith(audio_extensions)
+                ])
+
+            # 上传 widget
+            uploaded = st.file_uploader(
+                tr("bgm.custom_upload"),
+                type=["mp3", "wav", "flac", "m4a", "aac", "ogg"],
+                key=f"{key_prefix}bgm_custom_upload",
+                label_visibility="collapsed",
+            )
+
+            if uploaded:
+                safe_name = uploaded.name
+                dest_path = os.path.join(custom_dir, safe_name)
+                with open(dest_path, "wb") as f:
+                    f.write(uploaded.getbuffer())
+                st.success(tr("bgm.custom_upload_success") + f" - {safe_name}")
+                # 立即刷新列表
+                if safe_name not in existing_custom:
+                    existing_custom.append(safe_name)
+                    existing_custom.sort()
+
+            if existing_custom:
+                st.caption(tr("bgm.custom_uploaded_count", n=len(existing_custom)))
+        
+        # ── 内置音乐扫描 ───────────────────────────────────────────────
         try:
             all_files = list_resource_files("bgm")
-            # Filter to audio files only
-            audio_extensions = ('.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg')
-            bgm_files = sorted([f for f in all_files if f.lower().endswith(audio_extensions)])
+            built_in_files = sorted([f for f in all_files if f.lower().endswith(audio_extensions)])
         except Exception as e:
             st.warning(f"Failed to load BGM files: {e}")
-            bgm_files = []
+            built_in_files = []
         
-        # Add special "None" option
-        bgm_options = [tr("bgm.none")] + bgm_files
+        # ── 合并选项列表 ───────────────────────────────────────────────
+        # 选项格式：(显示名, 实际值)，实际值为 None 表示"无音乐"
+        none_label = tr("bgm.none")
+        separator = "───────── 自定义音乐 ─────────"
         
-        default_index = 0
+        options_display = [none_label]                          # index 0
+        options_value   = [None]
         
-        bgm_choice = st.selectbox(
-            "BGM",
-            bgm_options,
-            index=default_index,
+        if existing_custom:
+            options_display.append(separator)
+            options_value.append("__separator__")
+            for f in existing_custom:
+                display_name = f"☁️ {f}"
+                options_display.append(display_name)
+                options_value.append(("custom", f))
+        
+        for f in built_in_files:
+            options_display.append(f)
+            options_value.append(("built_in", f))
+        
+        # 当前选中索引（保持上次选择）
+        default_idx = st.session_state.get(f"{key_prefix}bgm_selector_idx", 0)
+        default_idx = min(default_idx, len(options_display) - 1)
+        
+        selected_display = st.selectbox(
+            tr("bgm.selector"),
+            options_display,
+            index=default_idx,
             label_visibility="collapsed",
-            key=f"{key_prefix}bgm_selector"
+            key=f"{key_prefix}bgm_selector",
         )
+        selected_idx = options_display.index(selected_display)
+        st.session_state[f"{key_prefix}bgm_selector_idx"] = selected_idx
         
-        # BGM volume slider (only show when BGM is selected)
-        if bgm_choice != tr("bgm.none"):
+        selected_value = options_value[selected_idx]
+        
+        # 解析 bgm_path：None = 无音乐，("built_in", fname) = 内置，("custom", fname) = 自定义
+        if selected_value is None or selected_value == "__separator__":
+            bgm_path = None
+        elif selected_value[0] == "custom":
+            bgm_path = os.path.join(custom_dir, selected_value[1])
+        else:
+            bgm_path = selected_value[1]
+        
+        # ── 音量控制（仅选中音乐时显示）────────────────────────────────
+        if bgm_path:
             bgm_volume = st.slider(
                 tr("bgm.volume"),
                 min_value=0.0,
@@ -233,31 +302,27 @@ def render_bgm_section(key_prefix=""):
                 step=0.01,
                 format="%.2f",
                 key=f"{key_prefix}bgm_volume_slider",
-                help=tr("bgm.volume_help")
+                help=tr("bgm.volume_help"),
             )
-        else:
-            bgm_volume = 0.2  # Default value when no BGM selected
-        
-        # BGM preview button (only if BGM is not "None")
-        if bgm_choice != tr("bgm.none"):
+            # 预览按钮
             if st.button(tr("bgm.preview"), key=f"{key_prefix}preview_bgm", use_container_width=True):
-                from pixelle_video.utils.os_util import get_resource_path, resource_exists
                 try:
-                    if resource_exists("bgm", bgm_choice):
-                        bgm_file_path = get_resource_path("bgm", bgm_choice)
-                        st.audio(bgm_file_path)
+                    from pixelle_video.utils.os_util import get_resource_path
+                    # 内置音乐需要解析路径
+                    if os.path.isabs(bgm_path) or os.path.exists(bgm_path):
+                        st.audio(bgm_path)
                     else:
-                        st.error(tr("bgm.preview_failed", file=bgm_choice))
+                        # built_in: 解析 resource 路径
+                        st.audio(get_resource_path("bgm", bgm_path))
                 except Exception as e:
-                    st.error(f"{tr('bgm.preview_failed', file=bgm_choice)}: {e}")
+                    st.error(f"{tr('bgm.preview_failed', file=os.path.basename(bgm_path))}: {e}")
+        else:
+            bgm_volume = 0.2
         
-        # Use full filename for bgm_path (including extension)
-        bgm_path = None if bgm_choice == tr("bgm.none") else bgm_choice
-    
-    return {
-        "bgm_path": bgm_path,
-        "bgm_volume": bgm_volume
-    }
+        return {
+            "bgm_path": bgm_path,
+            "bgm_volume": bgm_volume
+        }
 
 
 def render_version_info():
