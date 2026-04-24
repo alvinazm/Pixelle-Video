@@ -361,11 +361,25 @@ class VideoLipSyncPipelineUI(PipelineUI):
             )
             st.caption(tr("video_lipsync.inference_steps_hint"))
 
+            with st.container(border=True):
+                st.markdown(f"**{tr('video_lipsync.subtitle_params')}**")
+
+                with st.expander(tr("help.feature_description"), expanded=False):
+                    st.markdown(tr("video_lipsync.subtitle_what"))
+                    st.markdown(tr("video_lipsync.subtitle_how"))
+
+                enable_subtitle = st.checkbox(
+                    tr("video_lipsync.enable_subtitle"),
+                    value=False,
+                    key="lipsync_enable_subtitle"
+                )
+
             return {
                 "workflow_key": workflow_key,
                 "seed": int(seed),
                 "lips_expression": float(lips_expression),
                 "inference_steps": int(inference_steps),
+                "enable_subtitle": bool(enable_subtitle),
             }
 
     def _render_output_preview(self, pixelle_video: Any, params: dict):
@@ -452,6 +466,15 @@ class VideoLipSyncPipelineUI(PipelineUI):
                             import shutil
                             final = Path(task_dir) / "final.mp4"
                             shutil.copy(lip_synced, final)
+
+                        if params.get("enable_subtitle"):
+                            await update_progress(80, tr("video_lipsync.burning_subtitles"))
+                            final = await self._burn_subtitles_ffmpeg(
+                                str(final),
+                                narration_text,
+                                str(Path(task_dir) / "narration.wav"),
+                                str(Path(task_dir) / "final_with_subtitles.mp4"),
+                            )
 
                         await update_progress(100, tr("status.success"))
                         return str(final)
@@ -563,16 +586,13 @@ class VideoLipSyncPipelineUI(PipelineUI):
 
         # 根据不同 workflow 选择对应的节点映射
         if "InfiniteTalk" in workflow_key:
-            # InfiniteTalk 工作流节点映射
-            # 节点 34: VHS_LoadVideo (video)
-            # 节点 43: LoadAudio (upload)
-            # 节点 57: WanVideoSampler (seed, steps)
+            # 节点 34: VHS_LoadVideo (video), 节点 43: LoadAudio (audio), 节点 57: WanVideoSampler (seed)
+            # flowmatch_distill 调度器固定 4 步，不传 steps 参数
             audio_filename = await rh_client.upload_file(audio_path)
             node_info_list = [
                 {"nodeId": "34", "fieldName": "video", "fieldValue": video_filename},
                 {"nodeId": "43", "fieldName": "audio", "fieldValue": audio_filename},
                 {"nodeId": "57", "fieldName": "seed", "fieldValue": int(seed)},
-                {"nodeId": "57", "fieldName": "steps", "fieldValue": int(inference_steps)},
             ]
         else:
             # LatentSync 工作流节点映射 (默认)
@@ -681,6 +701,16 @@ class VideoLipSyncPipelineUI(PipelineUI):
 
         logger.info(f"   ✅ BGM mix saved: {output_file}")
         return str(output_file)
+
+    async def _burn_subtitles_ffmpeg(self, video_path, narration_text, audio_path, output_path):
+        from pixelle_video.services.video import VideoService
+        video_service = VideoService()
+        return await video_service.burn_subtitles(
+            video=video_path,
+            narration_text=narration_text,
+            audio_path=audio_path,
+            output=output_path,
+        )
 
 
 register_pipeline_ui(VideoLipSyncPipelineUI)

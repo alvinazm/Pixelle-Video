@@ -1005,3 +1005,132 @@ class VideoService:
             logger.error(f"FFmpeg error padding video: {error_msg}")
             raise RuntimeError(f"Failed to pad video: {error_msg}")
 
+    async def burn_subtitles(
+        self,
+        video: str,
+        narration_text: str,
+        audio_path: str,
+        output: str,
+        font_size: int = 0,
+    ) -> str:
+        """
+        Burn timed subtitles onto video using FFmpeg overlay.
+
+        Subtitle sentences are split from narration_text, evenly distributed
+        across the audio duration, and rendered as transparent PNG overlays
+        using Playwright (page.goto file://) for correct CJK font rendering.
+        """
+        import re, os, tempfile
+
+        probe = ffmpeg.probe(video)
+        video_stream = next(s for s in probe["streams"] if s["codec_type"] == "video")
+        vw = int(video_stream["width"])
+        vh = int(video_stream["height"])
+
+        audio_duration = self._get_audio_duration(audio_path)
+
+        parts = re.split(r"(?<=[。！？.!?])\s*", narration_text.strip())
+        parts = [p.strip() for p in parts if p.strip()]
+        if not parts:
+            logger.warning("No sentences found for subtitle burn")
+            import shutil
+            shutil.copy(video, output)
+            return output
+
+        per_duration = audio_duration / len(parts)
+
+        if font_size <= 0:
+            font_size = max(28, int(vw * 40 / 1080))
+
+        logger.info(
+            f"Burning subtitles: {len(parts)} sentences over {audio_duration:.1f}s"
+        )
+
+        from pixelle_video.utils.template_util import resolve_template_path
+        from playwright.async_api import async_playwright
+        template_path = resolve_template_path("1080x1920/subtitle_overlay.html")
+        with open(template_path, encoding="utf-8") as f:
+            subtitle_tpl = f.read()
+
+        async def render_subtitle_html(text: str, out_png: str):
+            html = (
+                subtitle_tpl
+                .replace("{{WIDTH}}", str(vw))
+                .replace("{{HEIGHT}}", str(vh))
+                .replace("{{FONT_SIZE}}", str(font_size))
+                .replace("{{TEXT}}", text)
+            )
+            fd_html, tmp_html = tempfile.mkstemp(suffix=".html")
+            with os.fdopen(fd_html, "w", encoding="utf-8") as f:
+                f.write(html)
+            try:
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(
+                        args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+                    )
+                    page = await browser.new_page(
+                        viewport={"width": vw, "height": vh}
+                    )
+                    await page.goto(Path(tmp_html).as_uri(), wait_until="networkidle")
+                    await page.screenshot(path=out_png, type="png", omit_background=True)
+                    await browser.close()
+            finally:
+                try:
+                    os.unlink(tmp_html)
+                except Exception:
+                    pass
+
+        sub_imgs = []
+        for i, text in enumerate(parts):
+            fd_png, tmp_png = tempfile.mkstemp(suffix=".png")
+            os.close(fd_png)
+            await render_subtitle_html(text, tmp_png)
+            sub_imgs.append(tmp_png)
+            logger.debug(f"  Subtitle frame {i+1}/{len(parts)} rendered")
+
+        try:
+            filter_parts = []
+            prev_label = "0:v"
+            for i, img_path in enumerate(sub_imgs):
+                start = i * per_duration
+                end_ts = (i + 1) * per_duration
+                enable = "enable='between(t,{},{})'".format(start, end_ts)
+                filter_parts.append("[{}:v]format=rgba,setsar=1[ovr{}];".format(i + 1, i))
+                filter_parts.append("[{}][ovr{}]overlay=0:0:{}[out{}]".format(prev_label, i, enable, i))
+                if i < len(sub_imgs) - 1:
+                    filter_parts[-1] += ";"
+                prev_label = "out{}".format(i)
+
+            cmd = ["ffmpeg", "-y", "-i", video]
+            for p in sub_imgs:
+                cmd.extend(["-i", p])
+            cmd += [
+                "-filter_complex", "".join(filter_parts),
+                "-map", "[{}]".format(prev_label),
+                "-map", "0:a?",
+                "-c:a", "copy",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                output,
+            ]
+
+            import subprocess
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr)
+
+            logger.success(f"Subtitles burned: {output}")
+            return output
+
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Subtitle burn error: {e}")
+            raise RuntimeError(f"Failed to burn subtitles: {e}")
+
+        finally:
+            for tmp in sub_imgs:
+                try:
+                    os.unlink(tmp)
+                except Exception:
+                    pass
+

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: {{WIDTH}}px;
+            height: {{HEIGHT}}px;
+            overflow: hidden;
+            font-family: 'PingFang SC', 'Source Han Sans', 'Microsoft YaHei', sans-serif;
+            background: transparent;
+        }
+        .subtitle-wrap {
+            position: absolute;
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+        }
+        .subtitle {
+            display: inline-block;
+            max-width: 900px;
+            padding: 10px 0;
+            font-size: {{FONT_SIZE}}px;
+            font-weight: 500;
+            color: #ffffff;
+            line-height: 1.6;
+            letter-spacing: 3px;
+            text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+            text-shadow:
+                2px 2px 4px rgba(0, 0, 0, 0.9),
+                0 0 8px rgba(0, 0, 0, 0.8),
+                0 0 16px rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body>
+    <div class="subtitle-wrap">
+        <div class="subtitle">{{TEXT}}</div>
+    </div>
+</body>
+</html>
