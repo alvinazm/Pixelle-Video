@@ -29,7 +29,16 @@ name_to_page = {
     "image_to_video": "pages/7_Image_To_Video.py",
     "action_transfer": "pages/8_Action_Transfer.py",
     "video_lipsync": "pages/9_Video_LipSync.py",
-    
+}
+
+pipeline_page_objects = {
+    "douyin_parser": st.Page("pages/3_Douyin_Parser.py", title="文案提取", icon="🔍"),
+    "quick_create": st.Page("pages/4_Quick_Create.py", title="文生视频", icon="⚡"),
+    "custom_media": st.Page("pages/5_Custom_Media.py", title="自定义素材", icon="🎨"),
+    "digital_human": st.Page("pages/6_Digital_Human.py", title="数字人口播", icon="🤖"),
+    "image_to_video": st.Page("pages/7_Image_To_Video.py", title="图生视频", icon="🎥"),
+    "action_transfer": st.Page("pages/8_Action_Transfer.py", title="动作迁移", icon="💃"),
+    "video_lipsync": st.Page("pages/9_Video_LipSync.py", title="视频对口型", icon="🎙️"),
 }
 
 
@@ -47,9 +56,8 @@ def main():
     pipelines = get_all_pipeline_uis()
 
     name_order = [
-        "quick_create", "custom_media", "digital_human",
+        "douyin_parser", "quick_create", "custom_media", "digital_human",
         "image_to_video", "action_transfer", "video_lipsync",
-        "douyin_parser"
     ]
     sorted_pipelines = sorted(
         pipelines,
@@ -60,18 +68,17 @@ def main():
     for i, pipeline in enumerate(sorted_pipelines):
         with cols[i % 2]:
             page_path = name_to_page.get(pipeline.name, "")
-
-            icon_col, text_col = st.columns([1, 10])
-            with icon_col:
-                st.markdown(
-                    f"<div style='font-size:2rem;text-align:center;padding-top:0.3rem'>{pipeline.icon}</div>",
-                    unsafe_allow_html=True,
-                )
-            with text_col:
-                st.markdown(f"**{pipeline.display_name}**")
+            with st.container(border=True):
+                icon_col, title_col = st.columns([1, 10])
+                with icon_col:
+                    st.markdown(
+                        f"<div style='font-size:2rem;text-align:center;padding-top:0.3rem'>{pipeline.icon}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with title_col:
+                    st.markdown(f"**{pipeline.display_name}**")
                 st.caption(pipeline.description or "")
-
-            st.page_link(page_path, label="进入", use_container_width=True)
+                st.page_link(pipeline_page_objects.get(pipeline.name), label="进入", use_container_width=True)
             st.divider()
 
 

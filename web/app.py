@@ -35,8 +35,6 @@ logger.add(log_file, rotation="10 MB", retention="7 days", level="INFO",
 
 
 def main():
-    """Main entry point with navigation"""
-    # Define pages using st.Page
     home_page = st.Page(
         "pages/1_🎬_Home.py",
         title="首页",
@@ -50,7 +48,6 @@ def main():
         icon="📚"
     )
 
-    # Pipeline pages (sorted by display order)
     pipeline_pages = [
         st.Page("pages/3_Douyin_Parser.py", title="文案提取", icon="🔍"),
         st.Page("pages/4_Quick_Create.py", title="文生视频", icon="⚡"),
@@ -58,14 +55,13 @@ def main():
         st.Page("pages/6_Digital_Human.py", title="数字人口播", icon="🤖"),
         st.Page("pages/7_Image_To_Video.py", title="图生视频", icon="🎥"),
         st.Page("pages/8_Action_Transfer.py", title="动作迁移", icon="💃"),
-        st.Page("pages/9_Video_LipSync.py", title="真人口播", icon="🎙️"),
+        st.Page("pages/9_Video_LipSync.py", title="视频对口型", icon="🎙️"),
     ]
 
-    # Set up navigation and run
     pg = st.navigation(
         {
             "": [home_page],
-            "📺 内容创作": pipeline_pages,
+            "📺 流水线": pipeline_pages,
             "🗂️ 历史": [history_page],
         }
     )
