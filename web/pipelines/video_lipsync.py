@@ -560,27 +560,43 @@ class VideoLipSyncPipelineUI(PipelineUI):
         rh_client = RunningHubClient(api_key=rh_api_key)
 
         video_filename = await rh_client.upload_file(video_path)
-        audio_filename = await rh_client.upload_file(audio_path)
 
-        node_info_list = [
-            {"nodeId": "40", "fieldName": "video", "fieldValue": video_filename},
-            {"nodeId": "82", "fieldName": "audio", "fieldValue": audio_filename},
-            {"nodeId": "74", "fieldName": "seed", "fieldValue": int(seed)},
-            {"nodeId": "84", "fieldName": "value", "fieldValue": float(lips_expression)},
-            {"nodeId": "88", "fieldName": "value", "fieldValue": int(inference_steps)},
-        ]
+        # 根据不同 workflow 选择对应的节点映射
+        if "InfiniteTalk" in workflow_key:
+            # InfiniteTalk 工作流节点映射
+            # 节点 34: VHS_LoadVideo (video)
+            # 节点 43: LoadAudio (upload)
+            # 节点 57: WanVideoSampler (seed, steps)
+            audio_filename = await rh_client.upload_file(audio_path)
+            node_info_list = [
+                {"nodeId": "34", "fieldName": "video", "fieldValue": video_filename},
+                {"nodeId": "43", "fieldName": "audio", "fieldValue": audio_filename},
+                {"nodeId": "57", "fieldName": "seed", "fieldValue": int(seed)},
+                {"nodeId": "57", "fieldName": "steps", "fieldValue": int(inference_steps)},
+            ]
+        else:
+            # LatentSync 工作流节点映射 (默认)
+            audio_filename = await rh_client.upload_file(audio_path)
+            node_info_list = [
+                {"nodeId": "40", "fieldName": "video", "fieldValue": video_filename},
+                {"nodeId": "82", "fieldName": "audio", "fieldValue": audio_filename},
+                {"nodeId": "74", "fieldName": "seed", "fieldValue": int(seed)},
+                {"nodeId": "84", "fieldName": "value", "fieldValue": float(lips_expression)},
+                {"nodeId": "88", "fieldName": "value", "fieldValue": int(inference_steps)},
+            ]
 
         logger.info(
-            f"🎬 LatentSync RunningHub Request\n"
-            f"   ├─ Workflow ID  : {workflow_id}\n"
-            f"   ├─ Local Video  : {video_path}\n"
-            f"   ├─ Local Audio  : {audio_path}\n"
-            f"   ├─ RH Video Name: {video_filename}\n"
-            f"   ├─ RH Audio Name: {audio_filename}\n"
-            f"   ├─ Seed        : {seed}\n"
-            f"   ├─ Lips Expr.  : {lips_expression}\n"
-            f"   ├─ Inference   : {inference_steps}\n"
-            f"   └─ Node List   : {node_info_list}"
+            f"🎬 LipSync RunningHub Request\n"
+            f"   ├─ Workflow    : {workflow_key}\n"
+            f"   ├─ Workflow ID : {workflow_id}\n"
+            f"   ├─ Local Video : {video_path}\n"
+            f"   ├─ Local Audio : {audio_path}\n"
+            f"   ├─ RH Video    : {video_filename}\n"
+            f"   ├─ RH Audio    : {audio_filename}\n"
+            f"   ├─ Seed       : {seed}\n"
+            f"   ├─ Lips Expr. : {lips_expression}\n"
+            f"   ├─ Inference  : {inference_steps}\n"
+            f"   └─ Node List  : {node_info_list}"
         )
 
         task_data = await rh_client.create_task(workflow_id, node_info_list)
