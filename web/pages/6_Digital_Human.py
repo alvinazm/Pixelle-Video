@@ -11,12 +11,11 @@ import streamlit as st
 from web.state.session import init_session_state, init_i18n, get_pixelle_video
 from web.components.header import render_header
 from web.components.settings import render_advanced_settings
-from web.components.faq import render_faq_sidebar
 from web.pipelines import get_pipeline_ui
 
 st.set_page_config(
-    page_title="Image to Video - Pixelle-Video",
-    page_icon="🎥",
+    page_title="数字人口播 - AI-Video",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -25,11 +24,10 @@ def main():
     init_session_state()
     init_i18n()
     render_header()
-    render_faq_sidebar()
     render_advanced_settings()
 
     pixelle_video = get_pixelle_video()
-    pipeline = get_pipeline_ui("image_to_video")
+    pipeline = get_pipeline_ui("digital_human")
 
     if pipeline.description:
         st.caption(pipeline.description)

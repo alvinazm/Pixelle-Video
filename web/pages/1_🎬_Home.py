@@ -11,25 +11,25 @@ import streamlit as st
 from web.state.session import init_session_state, init_i18n, get_pixelle_video
 from web.components.header import render_header
 from web.components.settings import render_advanced_settings
-from web.components.faq import render_faq_sidebar
 from web.i18n import tr
 from web.pipelines import get_all_pipeline_uis
 
 st.set_page_config(
-    page_title="Home - Pixelle-Video",
+    page_title="首页 - AI -Video",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 name_to_page = {
-    "quick_create": "pages/2_Quick_Create.py",
-    "custom_media": "pages/3_Custom_Media.py",
-    "digital_human": "pages/4_Digital_Human.py",
-    "image_to_video": "pages/5_Image_To_Video.py",
-    "action_transfer": "pages/6_Action_Transfer.py",
-    "video_lipsync": "pages/7_Video_LipSync.py",
-    "douyin_parser": "pages/8_Douyin_Parser.py",
+    "douyin_parser": "pages/3_Douyin_Parser.py",
+    "quick_create": "pages/4_Quick_Create.py",
+    "custom_media": "pages/5_Custom_Media.py",
+    "digital_human": "pages/6_Digital_Human.py",
+    "image_to_video": "pages/7_Image_To_Video.py",
+    "action_transfer": "pages/8_Action_Transfer.py",
+    "video_lipsync": "pages/9_Video_LipSync.py",
+    
 }
 
 
@@ -38,7 +38,6 @@ def main():
     init_i18n()
 
     render_header()
-    render_faq_sidebar()
     get_pixelle_video()
     render_advanced_settings()
 

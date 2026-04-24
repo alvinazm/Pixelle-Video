@@ -14,7 +14,7 @@
 Pixelle-Video Web UI - Main Entry Point
 
 This is the entry point for the Streamlit multi-page application.
-Uses st.navigation to define pages and set the default page to Home.
+Uses st.navigation to define pages and set the default page to Home (首页).
 """
 
 import sys
@@ -39,34 +39,34 @@ def main():
     # Define pages using st.Page
     home_page = st.Page(
         "pages/1_🎬_Home.py",
-        title="Home",
+        title="首页",
         icon="🎬",
         default=True
     )
 
     history_page = st.Page(
         "pages/2_📚_History.py",
-        title="History",
+        title="历史记录",
         icon="📚"
     )
 
     # Pipeline pages (sorted by display order)
     pipeline_pages = [
-        st.Page("pages/2_Quick_Create.py", title="Quick Create", icon="⚡"),
-        st.Page("pages/3_Custom_Media.py", title="Custom Media", icon="🎨"),
-        st.Page("pages/4_Digital_Human.py", title="Digital Human", icon="🤖"),
-        st.Page("pages/5_Image_To_Video.py", title="Image to Video", icon="🎥"),
-        st.Page("pages/6_Action_Transfer.py", title="Action Transfer", icon="💃"),
-        st.Page("pages/7_Video_LipSync.py", title="Video LipSync", icon="🎙️"),
-        st.Page("pages/8_Douyin_Parser.py", title="Douyin Parser", icon="🔍"),
+        st.Page("pages/3_Douyin_Parser.py", title="文案提取", icon="🔍"),
+        st.Page("pages/4_Quick_Create.py", title="文生视频", icon="⚡"),
+        st.Page("pages/5_Custom_Media.py", title="自定义素材", icon="🎨"),
+        st.Page("pages/6_Digital_Human.py", title="数字人口播", icon="🤖"),
+        st.Page("pages/7_Image_To_Video.py", title="图生视频", icon="🎥"),
+        st.Page("pages/8_Action_Transfer.py", title="动作迁移", icon="💃"),
+        st.Page("pages/9_Video_LipSync.py", title="真人口播", icon="🎙️"),
     ]
 
     # Set up navigation and run
     pg = st.navigation(
         {
             "": [home_page],
-            "📺 Pipelines": pipeline_pages,
-            "🗂️ History": [history_page],
+            "📺 内容创作": pipeline_pages,
+            "🗂️ 历史": [history_page],
         }
     )
     pg.run()

@@ -35,7 +35,7 @@ from web.utils.async_helpers import run_async
 
 # Page config
 st.set_page_config(
-    page_title="History - Pixelle-Video",
+    page_title="历史记录 - AI-Video",
     page_icon="📚",
     layout="wide",
 )

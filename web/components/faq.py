@@ -129,12 +129,7 @@ def render_faq_sidebar():
                 for question, answer in sections:
                     with st.expander(question, expanded=False):
                         st.markdown(answer, unsafe_allow_html=True)
-            
-            # Add a link to GitHub issues for more help
-            st.markdown(
-                f"💡 {tr('faq.more_help', fallback='Need more help?')} "
-                f"[GitHub Issues](https://github.com/AIDC-AI/Pixelle-Video/issues)"
-            )
+
         else:
             # If FAQ cannot be loaded, only show the GitHub link
             st.markdown(f"### 💡 {tr('faq.more_help', fallback='Need help?')}")
