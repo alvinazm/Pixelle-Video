@@ -66,20 +66,18 @@ def main():
 
     cols = st.columns(2)
     for i, pipeline in enumerate(sorted_pipelines):
+        page_obj = pipeline_page_objects.get(pipeline.name)
         with cols[i % 2]:
-            page_path = name_to_page.get(pipeline.name, "")
             with st.container(border=True):
-                icon_col, title_col = st.columns([1, 10])
-                with icon_col:
-                    st.markdown(
-                        f"<div style='font-size:2rem;text-align:center;padding-top:0.3rem'>{pipeline.icon}</div>",
-                        unsafe_allow_html=True,
-                    )
+                title_col, btn_col = st.columns([4, 1])
                 with title_col:
                     st.markdown(f"**{pipeline.display_name}**")
-                st.caption(pipeline.description or "")
-                st.page_link(pipeline_page_objects.get(pipeline.name), label="进入", use_container_width=True)
-            st.divider()
+                    st.caption(pipeline.description or "")
+                with btn_col:
+                    if page_obj:
+                        st.page_link(page_obj, label="进入")
+                    else:
+                        st.button("进入", disabled=True)
 
 
 if __name__ == "__main__":
