@@ -144,11 +144,12 @@ def render_style_config(pixelle_video):
             tts_workflow_options = [wf["display_name"] for wf in tts_workflows]
             tts_workflow_keys = [wf["key"] for wf in tts_workflows]
             
-            # Default to saved workflow if exists
             default_tts_index = 0
             saved_tts_workflow = tts_config.get("comfyui", {}).get("default_workflow")
             if saved_tts_workflow and saved_tts_workflow in tts_workflow_keys:
                 default_tts_index = tts_workflow_keys.index(saved_tts_workflow)
+            elif tts_workflow_keys and "runninghub/tts_qwen3.json" in tts_workflow_keys:
+                default_tts_index = tts_workflow_keys.index("runninghub/tts_qwen3.json")
             
             tts_workflow_display = st.selectbox(
                 "TTS Workflow",
@@ -163,7 +164,7 @@ def render_style_config(pixelle_video):
                 tts_selected_index = tts_workflow_options.index(tts_workflow_display)
                 tts_workflow_key = tts_workflow_keys[tts_selected_index]
             else:
-                tts_workflow_key = "selfhost/tts_edge.json"  # fallback
+                tts_workflow_key = "runninghub/tts_qwen3.json"  # fallback
             
             # Check and warn for selfhost TTS workflow (auto popup if not confirmed)
             check_and_warn_selfhost_workflow(tts_workflow_key)

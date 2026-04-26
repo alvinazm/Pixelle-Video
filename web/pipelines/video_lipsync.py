@@ -133,6 +133,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
             selected_voice = None
             tts_speed = None
             tts_workflow_key = None
+            ref_audio_path = None
 
             if tts_mode == "local":
                 from pixelle_video.tts_voices import EDGE_TTS_VOICES, get_voice_display_name
@@ -182,8 +183,8 @@ class VideoLipSyncPipelineUI(PipelineUI):
 
                 default_idx = 0
                 if tts_workflow_options:
-                    if "runninghub/tts_edge.json" in tts_workflow_keys:
-                        default_idx = tts_workflow_keys.index("runninghub/tts_edge.json")
+                    if "runninghub/tts_qwen3.json" in tts_workflow_keys:
+                        default_idx = tts_workflow_keys.index("runninghub/tts_qwen3.json")
 
                 tts_workflow_display = st.selectbox(
                     tr("tts.workflow_label"),
@@ -194,6 +195,21 @@ class VideoLipSyncPipelineUI(PipelineUI):
                 if tts_workflow_options:
                     tts_selected_idx = tts_workflow_options.index(tts_workflow_display)
                     tts_workflow_key = tts_workflow_keys[tts_selected_idx]
+
+                ref_audio_path = None
+                ref_audio_file = st.file_uploader(
+                    tr("tts.ref_audio"),
+                    type=["mp3", "wav", "flac", "m4a", "aac", "ogg"],
+                    help=tr("tts.ref_audio_help"),
+                    key="lipsync_ref_audio_upload"
+                )
+                if ref_audio_file is not None:
+                    st.audio(ref_audio_file)
+                    temp_dir = Path("temp")
+                    temp_dir.mkdir(exist_ok=True)
+                    ref_audio_path = temp_dir / f"ref_audio_{ref_audio_file.name}"
+                    with open(ref_audio_path, "wb") as f:
+                        f.write(ref_audio_file.getbuffer())
 
             narration_text = st.text_area(
                 tr("video_lipsync.narration_text"),
@@ -226,7 +242,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                                     return str(output_file)
                                 else:
                                     # Direct ComfyKit call (same pattern as action_transfer.py)
-                                    workflow_key = tts_workflow_key or "runninghub/tts_edge.json"
+                                    workflow_key = tts_workflow_key or "runninghub/tts_qwen3.json"
                                     workflow_path = Path("workflows") / workflow_key
 
                                     with open(workflow_path, 'r', encoding='utf-8') as f:
@@ -239,7 +255,10 @@ class VideoLipSyncPipelineUI(PipelineUI):
                                         workflow_input = str(workflow_path)
                                         logger.info(f"🔧 [Selfhost] TTS Preview: {workflow_input}")
 
-                                    result = await kit.execute(workflow_input, {"text": narration_text})
+                                    workflow_params = {"text": narration_text}
+                                    if ref_audio_path:
+                                        workflow_params["ref_audio"] = str(ref_audio_path)
+                                    result = await kit.execute(workflow_input, workflow_params)
 
                                     audio_path = None
                                     if hasattr(result, 'audios') and result.audios:
@@ -285,6 +304,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                 "tts_voice": selected_voice,
                 "tts_speed": tts_speed,
                 "tts_workflow": tts_workflow_key,
+                "ref_audio": str(ref_audio_path) if ref_audio_path else None,
             }
 
     def _render_lipsync_config(self) -> dict:
@@ -345,7 +365,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                     tr("video_lipsync.lips_expression"),
                     min_value=0.5,
                     max_value=3.0,
-                    value=1.5,
+                    value=1.0,
                     step=0.1,
                     key="lipsync_lips_expression"
                 )
@@ -370,7 +390,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
 
                 enable_subtitle = st.checkbox(
                     tr("video_lipsync.enable_subtitle"),
-                    value=False,
+                    value=True,
                     key="lipsync_enable_subtitle"
                 )
 
@@ -437,6 +457,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                             params.get("tts_speed", 1.0),
                             params.get("tts_workflow"),
                             task_dir,
+                            params.get("ref_audio"),
                         )
 
                         await update_progress(30, tr("video_lipsync.running_lipsync"))
@@ -514,7 +535,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
                     st.error(tr("status.error", error=str(e)))
                     st.stop()
 
-    async def _generate_tts_audio(self, pixelle_video, text, tts_mode, voice, speed, workflow_key, task_dir):
+    async def _generate_tts_audio(self, pixelle_video, text, tts_mode, voice, speed, workflow_key, task_dir, ref_audio=None):
         if tts_mode == "local":
             import edge_tts
             output_file = Path(task_dir) / "narration.wav"
@@ -524,7 +545,7 @@ class VideoLipSyncPipelineUI(PipelineUI):
             return str(output_file)
         else:
             kit = await pixelle_video._get_or_create_comfykit()
-            workflow_path = Path("workflows") / (workflow_key or "runninghub/tts_edge.json")
+            workflow_path = Path("workflows") / (workflow_key or "runninghub/tts_qwen3.json")
             with open(workflow_path, 'r', encoding='utf-8') as f:
                 workflow_config = json.load(f)
 
@@ -533,7 +554,10 @@ class VideoLipSyncPipelineUI(PipelineUI):
             else:
                 workflow_input = str(workflow_path)
 
-            result = await kit.execute(workflow_input, {"text": text})
+            workflow_params = {"text": text}
+            if ref_audio:
+                workflow_params["ref_audio"] = ref_audio
+            result = await kit.execute(workflow_input, workflow_params)
 
             audio_path = None
             if hasattr(result, 'audios') and result.audios:
