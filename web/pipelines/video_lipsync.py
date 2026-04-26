@@ -207,7 +207,8 @@ class VideoLipSyncPipelineUI(PipelineUI):
                     st.audio(ref_audio_file)
                     temp_dir = Path("temp")
                     temp_dir.mkdir(exist_ok=True)
-                    ref_audio_path = temp_dir / f"ref_audio_{ref_audio_file.name}"
+                    ext = ref_audio_file.name.split(".")[-1] if "." in ref_audio_file.name else "wav"
+                    ref_audio_path = temp_dir / f"ref_audio_{uuid.uuid4().hex[:8]}.{ext}"
                     with open(ref_audio_path, "wb") as f:
                         f.write(ref_audio_file.getbuffer())
 
@@ -218,9 +219,19 @@ class VideoLipSyncPipelineUI(PipelineUI):
                 key="lipsync_narration_text"
             )
 
-            if st.button(tr("video_lipsync.preview_audio"), key="lipsync_preview_audio", use_container_width=True):
+            if "lipsync_preview_running" not in st.session_state:
+                st.session_state.lipsync_preview_running = False
+            if "lipsync_preview_result" not in st.session_state:
+                st.session_state.lipsync_preview_result = None
+
+            if st.button(tr("video_lipsync.preview_audio"), key="lipsync_preview_audio", use_container_width=True, disabled=st.session_state.lipsync_preview_running):
+                st.session_state.lipsync_preview_running = True
+                st.session_state.lipsync_preview_result = None
+
                 if not narration_text:
+                    st.session_state.lipsync_preview_running = False
                     st.warning(tr("video_lipsync.narration_empty_warning"))
+                    st.stop()
                 else:
                     with st.spinner(tr("tts.previewing")):
                         try:
@@ -290,13 +301,21 @@ class VideoLipSyncPipelineUI(PipelineUI):
                                     return audio_path
 
                             audio_path = run_async(do_preview())
-
+                            st.session_state.lipsync_preview_result = audio_path
                             if audio_path and os.path.exists(audio_path):
                                 st.success(tr("tts.preview_success"))
                                 st.audio(audio_path)
                         except Exception as e:
+                            st.session_state.lipsync_preview_result = None
                             st.error(tr("tts.preview_failed", error=str(e)))
                             logger.exception(e)
+                        finally:
+                            st.session_state.lipsync_preview_running = False
+                            st.rerun()
+
+            if st.session_state.lipsync_preview_result and os.path.exists(st.session_state.lipsync_preview_result):
+                st.success(tr("tts.preview_success"))
+                st.audio(st.session_state.lipsync_preview_result)
 
             return {
                 "narration_text": narration_text,

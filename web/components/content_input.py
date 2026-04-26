@@ -45,7 +45,9 @@ def render_content_input():
                 ["generate", "fixed"],
                 horizontal=True,
                 format_func=lambda x: tr(f"mode.{x}"),
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                index=1,
+                key="content_mode_radio"
             )
             
             # Text input (unified for both modes)

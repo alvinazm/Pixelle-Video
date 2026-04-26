@@ -15,6 +15,7 @@ Style configuration components for web UI (middle column)
 """
 
 import os
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -186,7 +187,8 @@ def render_style_config(pixelle_video):
                 # Save to temp directory
                 temp_dir = Path("temp")
                 temp_dir.mkdir(exist_ok=True)
-                ref_audio_path = temp_dir / f"ref_audio_{ref_audio_file.name}"
+                ext = ref_audio_file.name.split(".")[-1] if "." in ref_audio_file.name else "wav"
+                ref_audio_path = temp_dir / f"ref_audio_{uuid.uuid4().hex[:8]}.{ext}"
                 with open(ref_audio_path, "wb") as f:
                     f.write(ref_audio_file.getbuffer())
             
@@ -355,7 +357,7 @@ def render_style_config(pixelle_video):
         # Determine type-specific default template
         type_default_templates = {
             'static': '1080x1920/static_default.html',
-            'image': '1080x1920/image_default.html',
+            'image': '1080x1920/image_blur_card.html',
             'video': '1080x1920/video_default.html'
         }
         type_specific_default = type_default_templates.get(selected_template_type, config_default_template)

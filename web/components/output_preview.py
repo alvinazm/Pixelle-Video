@@ -93,7 +93,6 @@ def render_single_output(pixelle_video, video_params):
                 # Progress callback to update UI
                 def update_progress(event: ProgressEvent):
                     """Update progress bar and status text from ProgressEvent"""
-                    # Translate event to user-facing message
                     if event.event_type == "frame_step":
                         # Frame step: "分镜 3/5 - 步骤 2/4: 生成插图"
                         action_key = f"progress.step_{event.action}"
@@ -115,14 +114,13 @@ def render_single_output(pixelle_video, video_params):
                     else:
                         # Simple events: use i18n key directly
                         message = tr(f"progress.{event.event_type}")
-                    
-                    # Append extra_info if available (e.g., batch progress)
+
                     if event.extra_info:
                         message = f"{message} - {event.extra_info}"
-                    
+
                     status_text.text(message)
-                    progress_bar.progress(min(int(event.progress * 100), 99))  # Cap at 99% until complete
-                
+                    progress_bar.progress(min(int(event.progress * 100), 99))
+
                 # Generate video (directly pass parameters)
                 # Note: media_width and media_height are auto-determined from template
                 video_params = {
