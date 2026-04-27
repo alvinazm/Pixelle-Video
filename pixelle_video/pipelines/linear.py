@@ -90,7 +90,6 @@ class LinearVideoPipeline(BasePipeline):
         """
         Execute the pipeline using the template method.
         """
-        # 1. Initialize context
         ctx = PipelineContext(
             input_text=text,
             params=kwargs,
@@ -98,24 +97,21 @@ class LinearVideoPipeline(BasePipeline):
         )
         
         try:
-            # === Phase 1: Preparation ===
             await self.setup_environment(ctx)
             
-            # === Phase 2: Content Creation ===
-            await self.generate_content(ctx)
-            await self.determine_title(ctx)
+            resume_from = ctx.params.get("resume_from_task_id")
+            if resume_from and ctx.storyboard and ctx.storyboard.frames:
+                completed_frames = [f for f in ctx.storyboard.frames if f.video_segment_path]
+                logger.info(f"♻️ Resuming: {len(completed_frames)}/{len(ctx.storyboard.frames)} frames already done")
+                logger.info(f"   Will skip content/title/visual planning, continue from frame production")
+            else:
+                await self.generate_content(ctx)
+                await self.determine_title(ctx)
+                await self.plan_visuals(ctx)
+                await self.initialize_storyboard(ctx)
             
-            # === Phase 3: Visual Planning ===
-            await self.plan_visuals(ctx)
-            await self.initialize_storyboard(ctx)
-            
-            # === Phase 4: Asset Production ===
             await self.produce_assets(ctx)
-            
-            # === Phase 5: Post Production ===
             await self.post_production(ctx)
-            
-            # === Phase 6: Finalization ===
             return await self.finalize(ctx)
             
         except Exception as e:
@@ -157,5 +153,39 @@ class LinearVideoPipeline(BasePipeline):
         raise NotImplementedError("finalize must be implemented by subclass")
 
     async def handle_exception(self, ctx: PipelineContext, error: Exception):
-        """Handle exceptions during pipeline execution."""
+        """Handle exceptions: save partial state for resume."""
         logger.error(f"Pipeline execution failed: {error}")
+
+        try:
+            if ctx.task_id and ctx.storyboard:
+                from datetime import datetime
+                partial_metadata = {
+                    "task_id": ctx.task_id,
+                    "created_at": ctx.storyboard.created_at.isoformat() if ctx.storyboard.created_at else None,
+                    "completed_at": datetime.now().isoformat(),
+                    "status": "failed",
+                    "error": str(error),
+                    "input": {**ctx.params, "text": ctx.input_text},
+                    "result": None,
+                    "failed_at_step": self._get_failed_step(ctx),
+                }
+                await self.core.persistence.save_task_metadata(ctx.task_id, partial_metadata)
+                await self.core.persistence.save_storyboard(ctx.task_id, ctx.storyboard)
+                logger.info(f"💾 Saved partial task state for: {ctx.task_id}")
+        except Exception as persist_err:
+            logger.error(f"Failed to save partial state: {persist_err}")
+
+    def _get_failed_step(self, ctx: PipelineContext) -> str:
+        if ctx.storyboard is None:
+            return "setup"
+        if not ctx.narrations:
+            return "content"
+        if ctx.storyboard.config and not ctx.storyboard.frames:
+            return "storyboard"
+        if ctx.storyboard.frames:
+            completed_frames = sum(1 for f in ctx.storyboard.frames if f.video_segment_path)
+            total_frames = len(ctx.storyboard.frames)
+            if completed_frames < total_frames:
+                return f"frame_{completed_frames + 1}_of_{total_frames}"
+            return "post_production"
+        return "unknown"

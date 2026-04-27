@@ -18,6 +18,7 @@ Provides unified access to all capabilities (LLM, TTS, Image, etc.)
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -202,7 +203,12 @@ class PixelleVideoCore:
         self.video_analysis = VideoAnalysisService(self.config, core=self)
         self.video = VideoService()
         self.frame_processor = FrameProcessor(self)
-        self.persistence = PersistenceService(output_dir="output")
+        # Determine project root (two levels up from this file)
+        _service_path = Path(__file__).resolve()
+        _project_root = _service_path.parent.parent
+        _output_dir = str(_project_root / "output")
+
+        self.persistence = PersistenceService(output_dir=_output_dir)
         self.history = HistoryManager(self.persistence)
         
         # 2. Register video generation pipelines

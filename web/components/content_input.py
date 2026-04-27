@@ -15,17 +15,53 @@ Content input components for web UI (left column)
 """
 
 import os
+import re
 import streamlit as st
 
 from web.i18n import tr
 from web.utils.async_helpers import get_project_version
+
+MAX_FIXED_SEGMENTS = 50
+
+
+@st.dialog(tr("video.dialog_over_limit_title"))
+def _segment_limit_dialog():
+    st.error(tr("video.frames_fixed_mode_over_limit", max=MAX_FIXED_SEGMENTS))
+    st.write("")
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button(tr("btn.dialog_confirm"), use_container_width=True, type="primary"):
+            st.session_state["_show_segment_limit_dialog"] = False
+            st.rerun()
+    with col2:
+        if st.button(tr("btn.dialog_continue_editing"), use_container_width=True):
+            st.session_state["_show_segment_limit_dialog"] = False
+            st.rerun()
+
+
+def _count_segments(text: str, split_mode: str) -> int:
+    """Preview segment count for fixed mode text."""
+    if not text or not text.strip():
+        return 0
+    if split_mode == "paragraph":
+        paragraphs = re.split(r"\n\s*\n", text)
+        return sum(1 for p in paragraphs if p.strip())
+    elif split_mode == "line":
+        return sum(1 for line in text.split("\n") if line.strip())
+    elif split_mode == "sentence":
+        cleaned = re.sub(r"\s+", " ", text.strip())
+        sentences = re.split(r"(?<=[。.!?！？])\s*", cleaned)
+        return sum(1 for s in sentences if s.strip())
+    return 0
 
 
 def render_content_input():
     """Render content input section (left column) with batch support"""
     with st.container(border=True):
         st.markdown(f"**{tr('section.content_input')}**")
-        
+
+        retry_params = st.session_state.get("retry_params")
+
         # ====================================================================
         # Step 1: Batch mode toggle (highest priority)
         # ====================================================================
@@ -39,16 +75,21 @@ def render_content_input():
             # ================================================================
             # Single task mode (original logic, unchanged)
             # ================================================================
-            # Processing mode selection
+            mode_val = 1
+            if retry_params:
+                mode_val = 0 if retry_params.get("mode") == "generate" else 1
+            
             mode = st.radio(
                 "Processing Mode",
                 ["generate", "fixed"],
                 horizontal=True,
                 format_func=lambda x: tr(f"mode.{x}"),
                 label_visibility="collapsed",
-                index=1,
+                index=mode_val,
                 key="content_mode_radio"
             )
+            
+            default_text = retry_params.get("text", "") if retry_params else ""
             
             # Text input (unified for both modes)
             text_placeholder = tr("input.topic_placeholder") if mode == "generate" else tr("input.content_placeholder")
@@ -57,6 +98,7 @@ def render_content_input():
             
             text = st.text_area(
                 tr("input.text"),
+                value=default_text,
                 placeholder=text_placeholder,
                 height=text_height,
                 help=text_help
@@ -80,19 +122,22 @@ def render_content_input():
                 split_mode = "paragraph"  # Default for generate mode (not used)
             
             # Title input (optional for both modes)
+            default_title = retry_params.get("title", "") if retry_params else ""
             title = st.text_input(
                 tr("input.title"),
+                value=default_title,
                 placeholder=tr("input.title_placeholder"),
                 help=tr("input.title_help")
             )
             
             # Number of scenes (only show in generate mode)
             if mode == "generate":
+                default_n = retry_params.get("n_scenes", 3) if retry_params else 3
                 n_scenes = st.slider(
                     tr("video.frames"),
                     min_value=3,
                     max_value=30,
-                    value=3,
+                    value=default_n,
                     help=tr("video.frames_help"),
                     label_visibility="collapsed"
                 )
@@ -101,6 +146,20 @@ def render_content_input():
                 # Fixed mode: n_scenes is ignored, set default value
                 n_scenes = 5
                 st.info(tr("video.frames_fixed_mode_hint"))
+                seg_count = _count_segments(text, split_mode)
+                if seg_count > 0:
+                    st.caption(tr("video.frames_fixed_mode_preview", n=seg_count))
+                if seg_count > MAX_FIXED_SEGMENTS:
+                    key = "_segment_dialog_dismissed"
+                    dismissed = st.session_state.get(key, False)
+                    if not dismissed:
+                        _segment_limit_dialog()
+                    # Mark as dismissed after dialog is closed
+                    if key not in st.session_state:
+                        st.session_state[key] = True
+                else:
+                    # Reset dismissed flag when back under limit
+                    st.session_state.pop("_segment_dialog_dismissed", None)
             
             return {
                 "batch_mode": False,
@@ -270,8 +329,17 @@ def render_bgm_section(key_prefix=""):
             options_display.append(f)
             options_value.append(("built_in", f))
         
-        # 当前选中索引（保持上次选择）
-        default_idx = st.session_state.get(f"{key_prefix}bgm_selector_idx", 0)
+        # 当前选中索引（保持上次选择，retry_params优先）
+        default_idx = 0
+        retry_params = st.session_state.get("retry_params")
+        if retry_params and retry_params.get("bgm_path"):
+            retry_bgm = retry_params["bgm_path"]
+            for i, val in enumerate(options_value):
+                if val and val != "__separator__" and val[1] == os.path.basename(retry_bgm):
+                    default_idx = i
+                    break
+        else:
+            default_idx = st.session_state.get(f"{key_prefix}bgm_selector_idx", 0)
         default_idx = min(default_idx, len(options_display) - 1)
         
         selected_display = st.selectbox(
@@ -296,11 +364,14 @@ def render_bgm_section(key_prefix=""):
         
         # ── 音量控制（仅选中音乐时显示）────────────────────────────────
         if bgm_path:
+            default_vol = 0.2
+            if retry_params and retry_params.get("bgm_volume") is not None:
+                default_vol = retry_params["bgm_volume"]
             bgm_volume = st.slider(
                 tr("bgm.volume"),
                 min_value=0.0,
                 max_value=0.5,
-                value=0.2,
+                value=default_vol,
                 step=0.01,
                 format="%.2f",
                 key=f"{key_prefix}bgm_volume_slider",

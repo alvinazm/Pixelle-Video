@@ -25,13 +25,13 @@ def main():
     init_i18n()
     render_header()
     render_advanced_settings()
-
+    
     pixelle_video = get_pixelle_video()
     pipeline = get_pipeline_ui("quick_create")
-
+    
     if pipeline.description:
         st.caption(pipeline.description)
-
+    
     pipeline.render(pixelle_video)
 
 

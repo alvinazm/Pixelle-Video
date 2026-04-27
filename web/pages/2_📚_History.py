@@ -209,33 +209,45 @@ def render_grid_task_card(task: dict, pixelle_video):
         # Meta info (one line)
         st.caption(f"🕒 {format_datetime(created_at)} | ⏱️ {format_duration(duration)} | 🎬 {n_frames}")
         
-        # Action buttons (compact, 3 columns)
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("👁️", key=f"view_{task_id}", help=tr("history.task_card.view_detail"), use_container_width=True):
-                st.session_state[f"detail_{task_id}"] = True
-                st.rerun()
-        
-        with col2:
-            if video_path and os.path.exists(video_path):
-                with open(video_path, "rb") as f:
-                    st.download_button(
-                        "⬇️",
-                        data=f,
-                        file_name=f"{title}.mp4",
-                        mime="video/mp4",
-                        key=f"download_{task_id}",
-                        help=tr("history.task_card.download"),
-                        use_container_width=True
-                    )
-            else:
-                st.button("⬇️", key=f"download_disabled_{task_id}", disabled=True, use_container_width=True)
-        
-        with col3:
-            if st.button("🗑️", key=f"delete_{task_id}", help=tr("history.task_card.delete"), use_container_width=True):
-                st.session_state[f"confirm_delete_{task_id}"] = True
-                st.rerun()
+        if status == "failed":
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄", key=f"retry_{task_id}", help=tr("history.task_card.retry"), use_container_width=True):
+                    input_params = run_async(pixelle_video.history.duplicate_task(task_id))
+                    if input_params:
+                        st.session_state["retry_params"] = input_params
+                        st.switch_page("pages/4_Quick_Create.py")
+            with col2:
+                if st.button("🗑️", key=f"delete_{task_id}", help=tr("history.task_card.delete"), use_container_width=True):
+                    st.session_state[f"confirm_delete_{task_id}"] = True
+                    st.rerun()
+        else:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("👁️", key=f"view_{task_id}", help=tr("history.task_card.view_detail"), use_container_width=True):
+                    st.session_state[f"detail_{task_id}"] = True
+                    st.rerun()
+            
+            with col2:
+                if video_path and os.path.exists(video_path):
+                    with open(video_path, "rb") as f:
+                        st.download_button(
+                            "⬇️",
+                            data=f,
+                            file_name=f"{title}.mp4",
+                            mime="video/mp4",
+                            key=f"download_{task_id}",
+                            help=tr("history.task_card.download"),
+                            use_container_width=True
+                        )
+                else:
+                    st.button("⬇️", key=f"download_disabled_{task_id}", disabled=True, use_container_width=True)
+            
+            with col3:
+                if st.button("🗑️", key=f"delete_{task_id}", help=tr("history.task_card.delete"), use_container_width=True):
+                    st.session_state[f"confirm_delete_{task_id}"] = True
+                    st.rerun()
         
         # Delete confirmation (show in modal-like way)
         if st.session_state.get(f"confirm_delete_{task_id}", False):
@@ -366,10 +378,20 @@ def render_task_detail_modal(task_id: str, pixelle_video):
     
     st.divider()
     
-    # Close button at the bottom
-    if st.button("❌ " + tr("history.detail.close"), key=f"close_detail_bottom_{task_id}"):
-        st.session_state[f"detail_{task_id}"] = False
-        st.rerun()
+    task_status = metadata.get("status", "unknown")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if task_status == "failed":
+            if st.button("🔄 " + tr("history.detail.resume"), key=f"retry_detail_{task_id}", use_container_width=True):
+                input_params = run_async(pixelle_video.history.duplicate_task(task_id))
+                if input_params:
+                    st.session_state["retry_params"] = input_params
+                    st.switch_page("pages/4_Quick_Create.py")
+    with col2:
+        if st.button("❌ " + tr("history.detail.close"), key=f"close_detail_bottom_{task_id}", use_container_width=True):
+            st.session_state[f"detail_{task_id}"] = False
+            st.rerun()
 
 
 def main():
@@ -416,27 +438,45 @@ def main():
     tasks = result["tasks"]
     total = result["total"]
     total_pages = result["total_pages"]
-    
-    # Page title with count
-    st.markdown(f"##### 📚 {tr('history.page_title')} ({total})")
-    
+
+    # Separate completed and failed tasks
+    completed_tasks = [t for t in tasks if t.get("status") == "completed"]
+    failed_tasks = [t for t in tasks if t.get("status") == "failed"]
+
+    # Page title with counts
+    st.markdown(f"##### 📚 {tr('history.page_title')} ({total}), "
+                f"{tr('history.status_completed')}({len(completed_tasks)}), "
+                f"{tr('history.status_failed')}({len(failed_tasks)})")
+
     # Show task cards in grid layout (4 columns)
     if not tasks:
         st.info(tr("history.no_tasks"))
     else:
-        # Grid layout: 4 cards per row
         CARDS_PER_ROW = 4
-        
-        # Process tasks in batches of CARDS_PER_ROW
-        for i in range(0, len(tasks), CARDS_PER_ROW):
-            cols = st.columns(CARDS_PER_ROW)
-            
-            # Fill each column with a task card
-            for j in range(CARDS_PER_ROW):
-                task_idx = i + j
-                if task_idx < len(tasks):
-                    with cols[j]:
-                        render_grid_task_card(tasks[task_idx], pixelle_video)
+
+        # Completed section
+        if completed_tasks:
+            st.markdown(f"**✅ {tr('history.status_completed')} ({len(completed_tasks)})**")
+            for i in range(0, len(completed_tasks), CARDS_PER_ROW):
+                cols = st.columns(CARDS_PER_ROW)
+                for j in range(CARDS_PER_ROW):
+                    task_idx = i + j
+                    if task_idx < len(completed_tasks):
+                        with cols[j]:
+                            render_grid_task_card(completed_tasks[task_idx], pixelle_video)
+
+        # Failed section
+        if failed_tasks:
+            if completed_tasks:
+                st.divider()
+            st.markdown(f"**❌ {tr('history.status_failed')} ({len(failed_tasks)})**")
+            for i in range(0, len(failed_tasks), CARDS_PER_ROW):
+                cols = st.columns(CARDS_PER_ROW)
+                for j in range(CARDS_PER_ROW):
+                    task_idx = i + j
+                    if task_idx < len(failed_tasks):
+                        with cols[j]:
+                            render_grid_task_card(failed_tasks[task_idx], pixelle_video)
     
     # Pagination
     if total_pages > 1:

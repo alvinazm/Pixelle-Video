@@ -314,7 +314,8 @@ class TTSService(ComfyBaseService):
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
                 logger.info(f"Downloading audio from {audio_path} to {output_path}")
-                async with httpx.AsyncClient() as client:
+                timeout = httpx.Timeout(connect=10.0, read=60, write=60, pool=60)
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.get(audio_path)
                     response.raise_for_status()
                     

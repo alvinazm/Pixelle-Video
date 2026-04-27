@@ -128,7 +128,6 @@ class SimpleBatchManager:
                 logger.info(f"Task {idx}/{self.total_count} completed: {result.video_path}")
                 
             except Exception as e:
-                # Record error but continue
                 error_msg = str(e)
                 error_trace = traceback.format_exc()
                 
@@ -143,7 +142,39 @@ class SimpleBatchManager:
                     "status": "failed"
                 })
                 
-                # Continue to next task
+                # Persist failed task to history so it survives process restart
+                try:
+                    from pathlib import Path
+                    from datetime import datetime
+                    failed_task_id = f"batch_failed_{idx}_{hash(topic) % 100000:05d}"
+                    tp = shared_config.get("title_prefix", "")
+                    task_title = (tp + " - " + topic) if tp else topic
+                    task_params = {
+                        "text": topic,
+                        "mode": "generate",
+                        "title": task_title,
+                    }
+                    for k, v in shared_config.items():
+                        if k != "title_prefix" and v is not None:
+                            task_params[k] = v
+                    import json
+                    task_dir = Path("output") / failed_task_id
+                    task_dir.mkdir(parents=True, exist_ok=True)
+                    metadata = {
+                        "task_id": failed_task_id,
+                        "created_at": datetime.now().isoformat(),
+                        "completed_at": datetime.now().isoformat(),
+                        "status": "failed",
+                        "error": error_msg,
+                        "input": task_params,
+                        "result": None,
+                        "failed_at_step": "pipeline",
+                    }
+                    with open(task_dir / "metadata.json", "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, ensure_ascii=False, indent=2)
+                except Exception as persist_err:
+                    logger.error(f"Failed to persist failed task: {persist_err}")
+                
                 continue
         
         success_count = len(self.results)
@@ -161,5 +192,86 @@ class SimpleBatchManager:
             "total_count": self.total_count,
             "success_count": success_count,
             "failed_count": failed_count
+        }
+    
+    def retry_failed(
+        self,
+        pixelle_video,
+        shared_config: Dict[str, Any],
+        overall_progress_callback: Optional[Callable] = None,
+        task_progress_callback_factory: Optional[Callable] = None
+    ) -> Dict[str, Any]:
+        """Retry failed tasks from a previous batch run."""
+        if not self.errors:
+            return {
+                "results": [],
+                "errors": [],
+                "total_count": 0,
+                "success_count": 0,
+                "failed_count": 0
+            }
+        
+        failed_topics = [err["topic"] for err in self.errors]
+        self.results = []
+        self.errors = []
+        self.total_count = len(failed_topics)
+        
+        logger.info(f"Retrying {self.total_count} failed tasks")
+        
+        for idx, topic in enumerate(failed_topics, 1):
+            self.current_index = idx
+            
+            if overall_progress_callback:
+                overall_progress_callback(current=idx, total=self.total_count, topic=topic)
+            
+            try:
+                title_prefix = shared_config.get("title_prefix")
+                task_params = {"text": topic, "mode": "generate"}
+                for key, value in shared_config.items():
+                    if key != "title_prefix" and value is not None:
+                        task_params[key] = value
+                if title_prefix:
+                    task_params["title"] = f"{title_prefix} - {topic}"
+                else:
+                    task_params["title"] = topic
+                if task_progress_callback_factory:
+                    task_params["progress_callback"] = task_progress_callback_factory(idx, topic)
+                
+                from web.utils.async_helpers import run_async
+                result = run_async(pixelle_video.generate_video(**task_params))
+                
+                from pathlib import Path
+                task_id = Path(result.video_path).parent.name
+                
+                self.results.append({
+                    "index": idx,
+                    "topic": topic,
+                    "task_id": task_id,
+                    "video_path": result.video_path,
+                    "status": "success"
+                })
+                
+                logger.info(f"Retry Task {idx}/{self.total_count} succeeded: {result.video_path}")
+                
+            except Exception as e:
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+                logger.error(f"Retry Task {idx}/{self.total_count} failed: {error_msg}")
+                
+                self.errors.append({
+                    "index": idx,
+                    "topic": topic,
+                    "error": error_msg,
+                    "traceback": error_trace,
+                    "status": "failed"
+                })
+                continue
+        
+        return {
+            "results": self.results,
+            "errors": self.errors,
+            "total_count": self.total_count,
+            "success_count": len(self.results),
+            "failed_count": len(self.errors)
         }
 

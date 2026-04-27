@@ -83,25 +83,58 @@ class StandardPipeline(LinearVideoPipeline):
         logger.info(f"🚀 Starting StandardPipeline in '{mode}' mode")
         logger.info(f"   Text length: {len(text)} chars")
         
-        # Create isolated task directory
-        task_dir, task_id = create_task_output_dir()
-        ctx.task_id = task_id
-        ctx.task_dir = task_dir
+        resume_from = ctx.params.get("resume_from_task_id")
         
-        logger.info(f"📁 Task directory created: {task_dir}")
-        logger.info(f"   Task ID: {task_id}")
-        
-        # Determine final video path
-        output_path = ctx.params.get("output_path")
-        if output_path is None:
-            ctx.final_video_path = get_task_final_video_path(task_id)
+        if resume_from:
+            ctx.task_id = resume_from
+            ctx.task_dir = str(Path("output") / resume_from)
+            ctx.final_video_path = get_task_final_video_path(resume_from)
+            logger.info(f"♻️ Resuming from task: {resume_from}")
+            logger.info(f"   Task directory: {ctx.task_dir}")
+            
+            existing_storyboard = await self.core.persistence.load_storyboard(resume_from)
+            if existing_storyboard:
+                ctx.storyboard = existing_storyboard
+                ctx.config = existing_storyboard.config
+                for frame in existing_storyboard.frames:
+                    seg = frame.video_segment_path
+                    if seg:
+                        if not Path(seg).is_absolute():
+                            seg = str(Path(ctx.task_dir) / seg)
+                        if not Path(seg).exists():
+                            logger.warning(f"   Frame {frame.index} segment missing: {seg}, will regenerate")
+                            frame.video_segment_path = None
+                        else:
+                            frame.video_segment_path = seg
+                completed = sum(1 for f in existing_storyboard.frames if f.video_segment_path)
+                logger.info(f"   Loaded storyboard: {len(existing_storyboard.frames)} frames, {completed} completed")
         else:
-            # We will copy to this path in finalize/post_production
-            # For internal processing, we still use the task dir path? 
-            # Actually StandardPipeline logic used get_task_final_video_path as the target for concat
-            # and then copied. Let's stick to that.
-            ctx.final_video_path = get_task_final_video_path(task_id)
-            logger.info(f"   Will copy final video to: {output_path}")
+            task_dir, task_id = create_task_output_dir()
+            ctx.task_id = task_id
+            ctx.task_dir = task_dir
+            
+            logger.info(f"📁 Task directory created: {task_dir}")
+            logger.info(f"   Task ID: {task_id}")
+            
+            # Write initial metadata immediately so the task is indexed and visible
+            # even if a later step fails before produce_assets() runs.
+            from datetime import datetime
+            await self.core.persistence.save_task_metadata(task_id, {
+                "task_id": task_id,
+                "created_at": datetime.now().isoformat(),
+                "completed_at": None,
+                "status": "pending",
+                "input": {**ctx.params, "text": ctx.input_text},
+                "result": None,
+                "failed_at_step": None,
+            })
+            
+            output_path = ctx.params.get("output_path")
+            if output_path is None:
+                ctx.final_video_path = get_task_final_video_path(task_id)
+            else:
+                ctx.final_video_path = get_task_final_video_path(task_id)
+                logger.info(f"   Will copy final video to: {output_path}")
 
     async def generate_content(self, ctx: PipelineContext):
         """Step 2: Generate or process script/narrations."""
@@ -295,6 +328,17 @@ class StandardPipeline(LinearVideoPipeline):
         storyboard = ctx.storyboard
         config = ctx.config
         
+        from datetime import datetime
+        await self.core.persistence.save_task_metadata(ctx.task_id, {
+            "task_id": ctx.task_id,
+            "created_at": storyboard.created_at.isoformat() if storyboard.created_at else None,
+            "completed_at": None,
+            "status": "running",
+            "input": {**ctx.params, "text": ctx.input_text},
+            "result": None,
+            "failed_at_step": None,
+        })
+        
         # Check if using RunningHub workflows for parallel processing
         is_runninghub = (
             (config.tts_workflow and config.tts_workflow.startswith("runninghub/")) or
@@ -307,10 +351,16 @@ class StandardPipeline(LinearVideoPipeline):
         
         if is_runninghub and runninghub_concurrent_limit > 1:
             logger.info(f"🚀 Using parallel processing for RunningHub workflows (max {runninghub_concurrent_limit} concurrent)")
-            
+
+            # Filter out already-completed frames (for resume support)
+            frames_to_process = [(i, f) for i, f in enumerate(storyboard.frames) if not f.video_segment_path]
+            already_done = len(storyboard.frames) - len(frames_to_process)
+            if already_done > 0:
+                logger.info(f"⏭️  Skipping {already_done} already-completed frames")
+
             semaphore = asyncio.Semaphore(runninghub_concurrent_limit)
-            completed_count = 0
-            
+            completed_count = already_done
+
             async def process_frame_with_semaphore(i: int, frame: StoryboardFrame):
                 nonlocal completed_count
                 async with semaphore:
@@ -354,7 +404,7 @@ class StandardPipeline(LinearVideoPipeline):
                     return i, processed_frame
             
             # Create all tasks and execute in parallel
-            tasks = [process_frame_with_semaphore(i, frame) for i, frame in enumerate(storyboard.frames)]
+            tasks = [process_frame_with_semaphore(i, frame) for i, frame in frames_to_process]
             results = await asyncio.gather(*tasks)
             
             # Update frames in order and calculate total duration
@@ -363,11 +413,18 @@ class StandardPipeline(LinearVideoPipeline):
                 storyboard.total_duration += processed_frame.duration
             
             logger.info(f"✅ All frames processed in parallel (total duration: {storyboard.total_duration:.2f}s)")
+            await self.core.persistence.save_storyboard(ctx.task_id, storyboard)
         else:
             # Serial processing for non-RunningHub workflows
             logger.info("⚙️ Using serial processing (non-RunningHub workflow)")
-            
+
             for i, frame in enumerate(storyboard.frames):
+                # Skip already-completed frames (for resume support)
+                if frame.video_segment_path:
+                    logger.info(f"⏭️  Skipping frame {i+1} (already completed)")
+                    storyboard.total_duration += frame.duration
+                    continue
+
                 base_progress = 0.2
                 frame_range = 0.6
                 per_frame_progress = frame_range / len(storyboard.frames)
@@ -404,6 +461,7 @@ class StandardPipeline(LinearVideoPipeline):
                 )
                 storyboard.total_duration += processed_frame.duration
                 logger.info(f"✅ Frame {i+1} completed ({processed_frame.duration:.2f}s)")
+                await self.core.persistence.save_storyboard(ctx.task_id, storyboard)
 
     async def post_production(self, ctx: PipelineContext):
         """Step 7: Concatenate videos and add BGM."""
@@ -514,4 +572,45 @@ class StandardPipeline(LinearVideoPipeline):
             
         except Exception as e:
             logger.error(f"Failed to persist task data: {e}")
-            # Don't raise - persistence failure shouldn't break video generation
+
+    async def handle_exception(self, ctx: PipelineContext, error: Exception):
+        logger.error(f"Pipeline execution failed: {error}")
+
+        try:
+            if not ctx.task_id:
+                return
+
+            from datetime import datetime
+            partial_metadata = {
+                "task_id": ctx.task_id,
+                "created_at": datetime.now().isoformat(),
+                "completed_at": datetime.now().isoformat(),
+                "status": "failed",
+                "error": str(error),
+                "input": {**ctx.params, "text": ctx.input_text},
+                "result": None,
+                "failed_at_step": self._get_failed_step(ctx),
+            }
+            await self.core.persistence.save_task_metadata(ctx.task_id, partial_metadata)
+
+            if ctx.storyboard:
+                await self.core.persistence.save_storyboard(ctx.task_id, ctx.storyboard)
+
+            logger.info(f"💾 Saved partial task state for: {ctx.task_id}")
+        except Exception as persist_err:
+            logger.error(f"Failed to save partial state: {persist_err}")
+
+    def _get_failed_step(self, ctx: PipelineContext) -> str:
+        if ctx.storyboard is None:
+            return "setup"
+        if not ctx.narrations:
+            return "content"
+        if ctx.storyboard.config and not ctx.storyboard.frames:
+            return "storyboard"
+        if ctx.storyboard.frames:
+            completed_frames = sum(1 for f in ctx.storyboard.frames if f.video_segment_path)
+            total_frames = len(ctx.storyboard.frames)
+            if completed_frames < total_frames:
+                return f"frame_{completed_frames + 1}_of_{total_frames}"
+            return "post_production"
+        return "unknown"

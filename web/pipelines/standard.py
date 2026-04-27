@@ -45,39 +45,26 @@ class StandardPipelineUI(PipelineUI):
         return tr("pipeline.quick_create.description")
     
     def render(self, pixelle_video: Any):
-        # Three-column layout
+        retry_params = st.session_state.pop("retry_params", None)
+        if retry_params:
+            st.session_state["retry_params"] = retry_params
+        
         left_col, middle_col, right_col = st.columns([1, 1, 1])
         
-        # ====================================================================
-        # Left Column: Content Input & BGM
-        # ====================================================================
         with left_col:
-            # Content input (mode, text, title, n_scenes)
             content_params = render_content_input()
-            
-            # BGM selection (bgm_path, bgm_volume)
             bgm_params = render_bgm_section()
         
-        # ====================================================================
-        # Middle Column: Style Configuration
-        # ====================================================================
         with middle_col:
-            # Style configuration (TTS, template, workflow, etc.)
             style_params = render_style_config(pixelle_video)
         
-        # ====================================================================
-        # Right Column: Output Preview
-        # ====================================================================
         with right_col:
-            # Combine all parameters
             video_params = {
                 "pipeline": self.name,
                 **content_params,
                 **bgm_params,
                 **style_params
             }
-            
-            # Render output preview (generate button, progress, video preview)
             render_output_preview(pixelle_video, video_params)
 
 

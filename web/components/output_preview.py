@@ -64,23 +64,52 @@ def render_single_output(pixelle_video, video_params):
     
     with st.container(border=True):
         st.markdown(f"**{tr('section.video_generation')}**")
-        
+
         # Check if system is configured
         if not config_manager.validate():
             st.warning(tr("settings.not_configured"))
-        
+
+        # Resume from previous task UI (if retry_params exists)
+        resume_task_id = st.session_state.get("retry_params", {}).get("task_id") if isinstance(st.session_state.get("retry_params"), dict) else None
+        if not resume_task_id:
+            resume_task_id = st.session_state.get("_resume_task_id")
+        resume_enabled = False
+        if resume_task_id:
+            detail = run_async(pixelle_video.history.get_task_detail(resume_task_id))
+            completed_frames = 0
+            total_frames = 0
+            if detail and detail.get("storyboard") and detail["storyboard"].frames:
+                total_frames = len(detail["storyboard"].frames)
+                completed_frames = sum(1 for f in detail["storyboard"].frames if f.video_segment_path)
+            st.warning(f"📌 检测到未完成任务：`{resume_task_id}` ({completed_frames}/{total_frames} 帧已完成)")
+            resume_enabled = st.checkbox(
+                "✅ 继续此任务（保留已完成的帧）",
+                value=True,
+                key="resume_enabled_checkbox"
+            )
+            if resume_enabled:
+                st.session_state["_resume_task_id"] = resume_task_id
+            else:
+                st.session_state.pop("_resume_task_id", None)
+
         # Generate Button
         if st.button(tr("btn.generate"), type="primary", use_container_width=True):
             # Validate system configuration
             if not config_manager.validate():
                 st.error(tr("settings.not_configured"))
                 st.stop()
-            
+
             # Validate input
             if not text:
                 st.error(tr("error.input_required"))
                 st.stop()
-            
+
+            # Check for resume scenario (retry from a previous task)
+            resume_task_id = st.session_state.pop("_resume_task_id", None)
+            if resume_task_id:
+                video_params["resume_from_task_id"] = resume_task_id
+                logger.info(f"♻️ Resuming from task: {resume_task_id}")
+
             # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -152,7 +181,11 @@ def render_single_output(pixelle_video, video_params):
                 # Add custom template parameters if any
                 if custom_values_for_video:
                     video_params["template_params"] = custom_values_for_video
-                
+
+                # Preserve resume_from_task_id through video_params reconstruction
+                if resume_task_id:
+                    video_params["resume_from_task_id"] = resume_task_id
+
                 result = run_async(pixelle_video.generate_video(**video_params))
                 
                 # Calculate total generation time
@@ -362,6 +395,18 @@ def render_batch_output(pixelle_video, video_params):
             col2.metric(f"✅ {tr('batch.success')}", batch_result["success_count"])
             col3.metric(f"❌ {tr('batch.failed')}", batch_result["failed_count"])
             
+            # Store failed topics in session_state for retry
+            if batch_result["errors"]:
+                failed_topics = [err["topic"] for err in batch_result["errors"]]
+                failed_errors = batch_result["errors"]
+                st.session_state["batch_retry_topics"] = failed_topics
+                st.session_state["batch_retry_config"] = shared_config
+                st.session_state["batch_retry_errors"] = failed_errors
+            else:
+                st.session_state.pop("batch_retry_topics", None)
+                st.session_state.pop("batch_retry_config", None)
+                st.session_state.pop("batch_retry_errors", None)
+            
             # Display total time
             minutes = int(total_time / 60)
             seconds = int(total_time % 60)
@@ -394,6 +439,26 @@ def render_batch_output(pixelle_video, video_params):
                 """,
                 unsafe_allow_html=True
             )
+            
+            # Retry failed button
+            if batch_result["errors"]:
+                st.markdown("---")
+                if st.button(tr("batch.retry_failed"), type="secondary", use_container_width=True):
+                    with st.spinner(tr("batch.retrying")):
+                        retry_result = batch_manager.retry_failed(
+                            pixelle_video=pixelle_video,
+                            shared_config=shared_config,
+                            overall_progress_callback=update_overall_progress,
+                            task_progress_callback_factory=make_task_progress_callback
+                        )
+                    
+                    retry_success = retry_result["success_count"]
+                    retry_failed = retry_result["failed_count"]
+                    if retry_failed == 0:
+                        st.success(f"✅ {tr('batch.retry_completed')}: {retry_success} 成功")
+                    else:
+                        st.warning(f"⚠️ {tr('batch.retry_completed')}: {retry_success} 成功, {retry_failed} 失败")
+                    st.rerun()
             
             # Show failed tasks if any
             if batch_result["errors"]:

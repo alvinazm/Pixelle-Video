@@ -70,6 +70,9 @@ class PersistenceService:
         # Index file for fast listing
         self.index_file = self.output_dir / ".index.json"
         self._ensure_index()
+        
+        # Recover orphaned "running" tasks from previous crashes
+        self._recover_orphaned_tasks_sync()
     
     def get_task_dir(self, task_id: str) -> Path:
         """Get task directory path"""
@@ -339,6 +342,34 @@ class PersistenceService:
     # Serialization Helpers
     # ========================================================================
     
+    def _metadata_to_summary(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert full metadata dict to index summary format (used in fallback path)."""
+        task_id = metadata.get("task_id", "")
+        title = metadata.get("input", {}).get("title")
+        if not title or title == "":
+            storyboard_path = self.get_storyboard_path(task_id)
+            if storyboard_path.exists():
+                try:
+                    with open(storyboard_path, "r", encoding="utf-8") as f:
+                        sb = json.load(f)
+                    title = sb.get("title", "") or "Untitled"
+                except Exception:
+                    title = "Untitled"
+            else:
+                title = "Untitled"
+        result = metadata.get("result") or {}
+        return {
+            "task_id": task_id,
+            "created_at": metadata.get("created_at"),
+            "completed_at": metadata.get("completed_at"),
+            "status": metadata.get("status", "unknown"),
+            "title": title,
+            "duration": result.get("duration", 0),
+            "n_frames": result.get("n_frames", 0),
+            "file_size": result.get("file_size", 0),
+            "video_path": result.get("video_path"),
+        }
+    
     def _storyboard_to_dict(self, storyboard: Storyboard) -> Dict[str, Any]:
         """Convert Storyboard to dict for JSON serialization"""
         return {
@@ -474,6 +505,83 @@ class PersistenceService:
         if not self.index_file.exists():
             self._save_index({"version": "1.0", "tasks": []})
     
+    def _recover_orphaned_tasks_sync(self):
+        """
+        Find tasks stuck in 'running' or 'pending' status (from interrupted processes)
+        and mark them as 'failed'. Runs synchronously at service startup.
+        """
+        try:
+            orphaned = []
+            for task_dir in self.output_dir.iterdir():
+                if not task_dir.is_dir() or task_dir.name.startswith("."):
+                    continue
+                metadata_path = task_dir / "metadata.json"
+                if not metadata_path.exists():
+                    continue
+                try:
+                    with open(metadata_path, "r", encoding="utf-8") as f:
+                        metadata = json.load(f)
+                    status = metadata.get("status", "unknown")
+                    if status in ("running", "pending"):
+                        orphaned.append((task_dir.name, metadata_path, metadata))
+                except Exception:
+                    continue
+            
+            if orphaned:
+                logger.warning(f"Found {len(orphaned)} orphaned task(s), marking as failed")
+                for task_id, metadata_path, metadata in orphaned:
+                    metadata["status"] = "failed"
+                    metadata["completed_at"] = datetime.now().isoformat()
+                    if "error" not in metadata:
+                        metadata["error"] = "Task was interrupted (status was 'running' on service restart)"
+                    with open(metadata_path, "w", encoding="utf-8") as f:
+                        json.dump(metadata, f, indent=2, ensure_ascii=False)
+                    logger.info(f"  Recovered orphaned task: {task_id}")
+                
+                # Rebuild index so recovered tasks appear in history
+                self.rebuild_index_sync()
+        except Exception as e:
+            logger.error(f"Failed to recover orphaned tasks: {e}")
+    
+    def rebuild_index_sync(self):
+        """Synchronous rebuild of index by scanning all task directories."""
+        try:
+            index = {"version": "1.0", "tasks": []}
+            for task_dir in self.output_dir.iterdir():
+                if not task_dir.is_dir() or task_dir.name.startswith("."):
+                    continue
+                task_id = task_dir.name
+                metadata_path = task_dir / "metadata.json"
+                if not metadata_path.exists():
+                    continue
+                try:
+                    with open(metadata_path, "r", encoding="utf-8") as f:
+                        metadata = json.load(f)
+                    
+                    title = metadata.get("input", {}).get("title")
+                    if not title or title == "":
+                        title = "Untitled"
+
+                    result = metadata.get("result") or {}
+                    index["tasks"].append({
+                        "task_id": task_id,
+                        "created_at": metadata.get("created_at"),
+                        "completed_at": metadata.get("completed_at"),
+                        "status": metadata.get("status", "unknown"),
+                        "title": title,
+                        "duration": result.get("duration", 0),
+                        "n_frames": result.get("n_frames", 0),
+                        "file_size": result.get("file_size", 0),
+                        "video_path": result.get("video_path"),
+                    })
+                except Exception:
+                    continue
+            
+            self._save_index(index)
+            logger.info(f"Index rebuilt: {len(index['tasks'])} tasks")
+        except Exception as e:
+            logger.error(f"Failed to rebuild index: {e}")
+    
     def _load_index(self) -> Dict[str, Any]:
         """Load index from file"""
         try:
@@ -513,16 +621,17 @@ class PersistenceService:
                     title = "Untitled"
         
         # Extract key info for index
+        result = metadata.get("result") or {}
         index_entry = {
             "task_id": task_id,
             "created_at": metadata.get("created_at"),
             "completed_at": metadata.get("completed_at"),
             "status": metadata.get("status", "unknown"),
             "title": title,
-            "duration": metadata.get("result", {}).get("duration", 0),
-            "n_frames": metadata.get("result", {}).get("n_frames", 0),
-            "file_size": metadata.get("result", {}).get("file_size", 0),
-            "video_path": metadata.get("result", {}).get("video_path"),
+            "duration": result.get("duration", 0),
+            "n_frames": result.get("n_frames", 0),
+            "file_size": result.get("file_size", 0),
+            "video_path": result.get("video_path"),
         }
         
         # Update or append
@@ -568,16 +677,17 @@ class PersistenceService:
                             title = "Untitled"
                 
                 # Add to index
+                result = metadata.get("result") or {}
                 index["tasks"].append({
                     "task_id": task_id,
                     "created_at": metadata.get("created_at"),
                     "completed_at": metadata.get("completed_at"),
                     "status": metadata.get("status", "unknown"),
                     "title": title,
-                    "duration": metadata.get("result", {}).get("duration", 0),
-                    "n_frames": metadata.get("result", {}).get("n_frames", 0),
-                    "file_size": metadata.get("result", {}).get("file_size", 0),
-                    "video_path": metadata.get("result", {}).get("video_path"),
+                    "duration": result.get("duration", 0),
+                    "n_frames": result.get("n_frames", 0),
+                    "file_size": result.get("file_size", 0),
+                    "video_path": result.get("video_path"),
                 })
         
         self._save_index(index)
@@ -614,8 +724,24 @@ class PersistenceService:
                 "total_pages": 5         # Total pages
             }
         """
+        # Fallback: if index is out of sync with filesystem, scan directly
         index = self._load_index()
-        tasks = index.get("tasks", [])
+        indexed_task_ids = {t["task_id"] for t in index.get("tasks", [])}
+        
+        actual_task_ids = set()
+        for task_dir in self.output_dir.iterdir():
+            if task_dir.is_dir() and not task_dir.name.startswith("."):
+                if (task_dir / "metadata.json").exists():
+                    actual_task_ids.add(task_dir.name)
+        
+        # If index is stale (missing directories), fall back to filesystem scan
+        if len(actual_task_ids - indexed_task_ids) > 0:
+            logger.warning(f"Index is stale: {len(indexed_task_ids)} indexed vs {len(actual_task_ids)} actual. "
+                           f"Falling back to filesystem scan.")
+            tasks = await self.list_tasks(status=None, limit=10000)
+            tasks = [self._metadata_to_summary(t) for t in tasks]
+        else:
+            tasks = index.get("tasks", [])
         
         # Filter by status
         if status:
@@ -683,28 +809,28 @@ class PersistenceService:
     async def delete_task(self, task_id: str) -> bool:
         """
         Delete a task and all its files
-        
+
         Args:
             task_id: Task ID to delete
-        
+
         Returns:
             True if successful, False otherwise
         """
         try:
             import shutil
-            
+
             task_dir = self.get_task_dir(task_id)
             if task_dir.exists():
                 shutil.rmtree(task_dir)
                 logger.info(f"Deleted task directory: {task_dir}")
-            
+
             # Update index
             index = self._load_index()
             tasks = index.get("tasks", [])
             tasks = [t for t in tasks if t["task_id"] != task_id]
             index["tasks"] = tasks
             self._save_index(index)
-            
+
             return True
         except Exception as e:
             logger.error(f"Failed to delete task {task_id}: {e}")

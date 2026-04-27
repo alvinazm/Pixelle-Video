@@ -206,6 +206,9 @@ async def generate_narrations_from_content(
     return narrations
 
 
+MAX_SEGMENTS = 50
+
+
 async def split_narration_script(
     script: str,
     split_mode: Literal["paragraph", "line", "sentence"] = "paragraph",
@@ -222,6 +225,9 @@ async def split_narration_script(
     
     Returns:
         List of narration segments
+    
+    Raises:
+        ValueError: If segment count exceeds MAX_SEGMENTS
     """
     logger.info(f"Splitting script (mode={split_mode}, length={len(script)} chars)")
     
@@ -258,11 +264,16 @@ async def split_narration_script(
         logger.warning(f"Unknown split_mode '{split_mode}', falling back to 'line'")
         narrations = [line.strip() for line in script.split('\n') if line.strip()]
     
+    if len(narrations) > MAX_SEGMENTS:
+        raise ValueError(
+            f"视频脚本超过 {MAX_SEGMENTS} 个段落，请删减后再提交！"
+        )
+
     # Log statistics
     if narrations:
         lengths = [len(s) for s in narrations]
         logger.info(f"   Min: {min(lengths)} chars, Max: {max(lengths)} chars, Avg: {sum(lengths)//len(lengths)} chars")
-    
+
     return narrations
 
 

@@ -43,8 +43,8 @@ PROMPT_PREFIX_PRESETS = [
 
 def render_style_config(pixelle_video):
     """Render style configuration section (middle column)"""
-    # TTS Section (moved from left column)
-    # ====================================================================
+    retry_params = st.session_state.get("retry_params")
+    
     with st.container(border=True):
         st.markdown(f"**{tr('section.tts')}**")
         
@@ -59,12 +59,16 @@ def render_style_config(pixelle_video):
         tts_config = comfyui_config["tts"]
         
         # Inference mode selection
+        if retry_params:
+            mode_idx = 0 if retry_params.get("tts_inference_mode") == "local" else 1
+        else:
+            mode_idx = 0 if tts_config.get("inference_mode", "local") == "local" else 1
         tts_mode = st.radio(
             tr("tts.inference_mode"),
             ["local", "comfyui"],
             horizontal=True,
             format_func=lambda x: tr(f"tts.mode.{x}"),
-            index=0 if tts_config.get("inference_mode", "local") == "local" else 1,
+            index=mode_idx,
             key="tts_inference_mode"
         )
         
@@ -86,6 +90,11 @@ def render_style_config(pixelle_video):
             saved_voice = local_config.get("voice", "zh-CN-YunjianNeural")
             saved_speed = local_config.get("speed", 1.2)
             
+            # Use retry_params voice if available
+            if retry_params:
+                saved_voice = retry_params.get("tts_voice", saved_voice)
+                saved_speed = retry_params.get("tts_speed", saved_speed)
+            
             # Build voice options with i18n
             voice_options = []
             voice_ids = []
@@ -97,7 +106,6 @@ def render_style_config(pixelle_video):
                 voice_options.append(display_name)
                 voice_ids.append(voice_id)
                 
-                # Set default index if matches saved voice
                 if voice_id == saved_voice:
                     default_voice_index = idx
             
@@ -149,6 +157,8 @@ def render_style_config(pixelle_video):
             saved_tts_workflow = tts_config.get("comfyui", {}).get("default_workflow")
             if saved_tts_workflow and saved_tts_workflow in tts_workflow_keys:
                 default_tts_index = tts_workflow_keys.index(saved_tts_workflow)
+            elif tts_workflow_keys and "runninghub/tts_index2.json" in tts_workflow_keys:
+                default_tts_index = tts_workflow_keys.index("runninghub/tts_index2.json")
             elif tts_workflow_keys and "runninghub/tts_qwen3.json" in tts_workflow_keys:
                 default_tts_index = tts_workflow_keys.index("runninghub/tts_qwen3.json")
             
@@ -165,7 +175,7 @@ def render_style_config(pixelle_video):
                 tts_selected_index = tts_workflow_options.index(tts_workflow_display)
                 tts_workflow_key = tts_workflow_keys[tts_selected_index]
             else:
-                tts_workflow_key = "runninghub/tts_qwen3.json"  # fallback
+                tts_workflow_key = "runninghub/tts_index2.json"  # fallback
             
             # Check and warn for selfhost TTS workflow (auto popup if not confirmed)
             check_and_warn_selfhost_workflow(tts_workflow_key)
@@ -360,17 +370,17 @@ def render_style_config(pixelle_video):
             'image': '1080x1920/image_blur_card.html',
             'video': '1080x1920/video_default.html'
         }
-        type_specific_default = type_default_templates.get(selected_template_type, config_default_template)
         
-        # Initialize selected template in session state if not exists
-        if 'selected_template' not in st.session_state:
-            st.session_state['selected_template'] = type_specific_default
+        # Override with retry_params template if available
+        if retry_params and retry_params.get("frame_template"):
+            st.session_state['selected_template'] = retry_params["frame_template"]
+        elif 'selected_template' not in st.session_state:
+            st.session_state['selected_template'] = type_default_templates.get(selected_template_type, config_default_template)
         
         # Track last selected template type to detect type changes
         last_template_type = st.session_state.get('last_template_type', None)
         if last_template_type != selected_template_type:
-            # Template type changed, reset to type-specific default
-            st.session_state['selected_template'] = type_specific_default
+            st.session_state['selected_template'] = type_default_templates.get(selected_template_type, config_default_template)
             st.session_state['last_template_type'] = selected_template_type
         
         # Collect size groups and prepare tabs
@@ -742,9 +752,10 @@ def render_style_config(pixelle_video):
         
             # If user has a saved preference in config, try to match it
             comfyui_config = config_manager.get_comfyui_config()
-            # Select config based on template type (image or video)
             media_config_key = "video" if template_media_type == "video" else "image"
             saved_workflow = comfyui_config.get(media_config_key, {}).get("default_workflow", "")
+            if retry_params and retry_params.get("media_workflow"):
+                saved_workflow = retry_params["media_workflow"]
             if saved_workflow and saved_workflow in workflow_keys:
                 default_workflow_index = workflow_keys.index(saved_workflow)
         
