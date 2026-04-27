@@ -421,9 +421,16 @@ class HTMLFrameGenerator:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(html)
 
-            await page.goto(Path(tmp_html_path).as_uri(), wait_until="networkidle")
-            await page.screenshot(path=output_path, type="png", omit_background=True)
+            await page.goto(Path(tmp_html_path).as_uri(), wait_until="networkidle", timeout=30000)
+            await page.screenshot(path=output_path, type="png", omit_background=True, timeout=30000)
         except Exception as e:
+            logger.warning(f"Render failed, closing browser for recovery: {e}")
+            if HTMLFrameGenerator._browser:
+                try:
+                    await HTMLFrameGenerator._browser.close()
+                except Exception:
+                    pass
+                HTMLFrameGenerator._browser = None
             await page.close()
             if tmp_html_path and os.path.exists(tmp_html_path):
                 os.unlink(tmp_html_path)

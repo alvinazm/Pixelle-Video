@@ -8,7 +8,7 @@ from loguru import logger
 _pool = ThreadPoolExecutor(max_workers=1)
 
 
-def run_async(coro):
+def run_async(coro, timeout=10):
     loop = None
     try:
         loop = asyncio.get_running_loop()
@@ -19,7 +19,20 @@ def run_async(coro):
         f = asyncio.ensure_future(coro)
 
         def _sync_wait():
-            return _pool.submit(loop.run_until_complete, f).result()
+            future = _pool.submit(loop.run_until_complete, f)
+            try:
+                return future.result(timeout=timeout)
+            except TimeoutError:
+                # Cancel the asyncio task to unblock the loop
+                f.cancel()
+                # Close browser to recover from stuck state
+                from pixelle_video.services.frame_html import HTMLFrameGenerator
+                import asyncio
+                try:
+                    loop.run_until_complete(HTMLFrameGenerator.close_browser())
+                except Exception:
+                    pass
+                raise TimeoutError(f"Async operation timed out after {timeout}s")
 
         return _sync_wait()
 
