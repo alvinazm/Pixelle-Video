@@ -364,16 +364,27 @@ class DigitalHumanPipelineUI(PipelineUI):
                 status_text = st.empty()
                 
                 start_time = time.time()
-                
-                try:
-                    # Define async generation function
-                    async def generate_digital_human_video():
-                        task_dir, task_id = create_task_output_dir()
+
+                def _wrap_and_save():
+                    from datetime import datetime
+                    created_at = datetime.now().isoformat()
+                    task_dir, task_id = create_task_output_dir()
+                    st.session_state["_dh_task_id"] = task_id
+                    st.session_state["_dh_created_at"] = created_at
+
+                    async def _gen_video():
                         kit = await pixelle_video._get_or_create_comfykit()
                         workflow_path = video_params["workflow_path"]
 
                         import json
                         from pathlib import Path
+
+                        async def _save_metadata(metadata):
+                            try:
+                                await pixelle_video.core.persistence.save_task_metadata(task_id, metadata)
+                                logger.info(f"💾 Saved task metadata: {task_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to save task metadata {task_id}: {e}")
 
                         if mode == "customize":
                             status_text.text(tr("progress.step_audio"))
@@ -458,6 +469,31 @@ class DigitalHumanPipelineUI(PipelineUI):
                                     f.write(response.content)
                             progress_bar.progress(100)
                             status_text.text(tr("status.success"))
+                            await _save_metadata({
+                                "task_id": task_id,
+                                "created_at": created_at,
+                                "completed_at": datetime.now().isoformat(),
+                                "status": "completed",
+                                "input": {
+                                    "mode": mode,
+                                    "title": generated_text[:50] if generated_text else "Digital Human Video",
+                                    "n_scenes": 1,
+                                    "tts_inference_mode": video_params.get("tts_inference_mode", "local"),
+                                    "tts_voice": video_params.get("tts_voice"),
+                                    "tts_speed": video_params.get("tts_speed"),
+                                },
+                                "result": {
+                                    "video_path": final_video_path,
+                                    "duration": 0,
+                                    "n_frames": 1,
+                                },
+                                "config": {
+                                    "llm_model": pixelle_video.core.config.get("llm", {}).get("model", "unknown"),
+                                    "llm_base_url": pixelle_video.core.config.get("llm", {}).get("base_url", "unknown"),
+                                    "comfyui_url": pixelle_video.core.config.get("comfyui", {}).get("comfyui_url", "unknown"),
+                                    "runninghub_enabled": bool(pixelle_video.core.config.get("comfyui", {}).get("runninghub_api_key")),
+                                }
+                            })
                             return final_video_path
                         
                         else:
@@ -580,8 +616,33 @@ class DigitalHumanPipelineUI(PipelineUI):
                                         f.write(response.content)
                                 progress_bar.progress(100)
                                 status_text.text(tr("status.success"))
+                                await _save_metadata({
+                                    "task_id": task_id,
+                                    "created_at": created_at,
+                                    "completed_at": datetime.now().isoformat(),
+                                    "status": "completed",
+                                    "input": {
+                                        "mode": mode,
+                                        "title": goods_text[:50] if goods_text else "Digital Human Video",
+                                        "n_scenes": 1,
+                                        "tts_inference_mode": video_params.get("tts_inference_mode", "local"),
+                                        "tts_voice": video_params.get("tts_voice"),
+                                        "tts_speed": video_params.get("tts_speed"),
+                                    },
+                                    "result": {
+                                        "video_path": final_video_path,
+                                        "duration": 0,
+                                        "n_frames": 1,
+                                    },
+                                    "config": {
+                                        "llm_model": pixelle_video.core.config.get("llm", {}).get("model", "unknown"),
+                                        "llm_base_url": pixelle_video.core.config.get("llm", {}).get("base_url", "unknown"),
+                                        "comfyui_url": pixelle_video.core.config.get("comfyui", {}).get("comfyui_url", "unknown"),
+                                        "runninghub_enabled": bool(pixelle_video.core.config.get("comfyui", {}).get("runninghub_api_key")),
+                                    }
+                                })
                                 return final_video_path
-                                
+
                             else:
                                 workflow_path = first_workflow_path
                                 workflow_params = {"firstimage": character_assets[0], "secondimage": goods_assets[0], "goodstype": goods_title}
@@ -693,16 +754,62 @@ class DigitalHumanPipelineUI(PipelineUI):
                                         f.write(response.content)
                                 progress_bar.progress(100)
                                 status_text.text(tr("status.success"))
+                                await _save_metadata({
+                                    "task_id": task_id,
+                                    "created_at": created_at,
+                                    "completed_at": datetime.now().isoformat(),
+                                    "status": "completed",
+                                    "input": {
+                                        "mode": mode,
+                                        "title": goods_title[:50] if goods_title else "Digital Human Video",
+                                        "n_scenes": 1,
+                                        "tts_inference_mode": video_params.get("tts_inference_mode", "local"),
+                                        "tts_voice": video_params.get("tts_voice"),
+                                        "tts_speed": video_params.get("tts_speed"),
+                                    },
+                                    "result": {
+                                        "video_path": final_video_path,
+                                        "duration": 0,
+                                        "n_frames": 1,
+                                    },
+                                    "config": {
+                                        "llm_model": pixelle_video.core.config.get("llm", {}).get("model", "unknown"),
+                                        "llm_base_url": pixelle_video.core.config.get("llm", {}).get("base_url", "unknown"),
+                                        "comfyui_url": pixelle_video.core.config.get("comfyui", {}).get("comfyui_url", "unknown"),
+                                        "runninghub_enabled": bool(pixelle_video.core.config.get("comfyui", {}).get("runninghub_api_key")),
+                                    }
+                                })
                                 return final_video_path
-                                
+
+
 
                         st.error(tr("status.video_not_found", path=final_video_path))
-                
+
+                try:
+                    _wrap_and_save()
                 except Exception as e:
                     status_text.text("")
                     progress_bar.empty()
                     st.error(tr("status.error", error=str(e)))
                     logger.exception(e)
+                    from datetime import datetime
+                    failed_task_id = st.session_state.get("_dh_task_id")
+                    failed_created_at = st.session_state.get("_dh_created_at")
+                    if failed_task_id:
+                        run_async(pixelle_video.core.persistence.save_task_metadata(failed_task_id, {
+                            "task_id": failed_task_id,
+                            "created_at": failed_created_at or datetime.now().isoformat(),
+                            "completed_at": datetime.now().isoformat(),
+                            "status": "failed",
+                            "error": str(e),
+                            "input": {},
+                            "config": {
+                                "llm_model": pixelle_video.core.config.get("llm", {}).get("model", "unknown"),
+                                "llm_base_url": pixelle_video.core.config.get("llm", {}).get("base_url", "unknown"),
+                                "comfyui_url": pixelle_video.core.config.get("comfyui", {}).get("comfyui_url", "unknown"),
+                                "runninghub_enabled": bool(pixelle_video.core.config.get("comfyui", {}).get("runninghub_api_key")),
+                            }
+                        }))
                     st.stop()
 
 
